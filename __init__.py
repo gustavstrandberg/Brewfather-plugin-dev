@@ -71,7 +71,7 @@ class MQTTActorInt(ActorBase):
         self.api.cache["mqtt"].client.publish(self.topic, payload=0, qos=2, retain=True)
 
 @cbpi.sensor
-class MQTTListenerControlObject(SensorActive):
+class MQTTListenerBrewfatherCommands(SensorActive):
 #    a_topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
     a_topic = "cbpi/homebrewing/uuid/commands"
     #b_payload = Property.Text("Object payload", configurable=True, default_value="", description="Object in patload, e.g. pump, leave blank for raw payload")
