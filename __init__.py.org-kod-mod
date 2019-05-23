@@ -6,7 +6,6 @@ from modules.core.hardware import SensorActive
 import json
 import os, re, threading, time
 from modules.core.props import Property
-import requests
 
 q = Queue()
 
@@ -37,34 +36,40 @@ class MQTTThread (threading.Thread):
         self.client.connect(str(self.server), int(self.port), 60)
         self.client.loop_forever()
 
-
-@cbpi.backgroundtask(key='mqtt_listener', interval=1)
-def mqtt_listener_background_task(self):
+def MQTT_Listener(SensorActive):
+    last_value = None
+    self.topic = "cbpi/homebrewing/uuid/commands"
 
     def on_message(client, userdata, msg):
-        topic=msg.topic
-        msg_decode=str(msg.payload.decode("utf-8","ignore"))
-        print("MQTT data Received",msg_decode)
-        msg_in=json.loads(msg_decode)
-                
-        if "pump" in msg_in:
-            if msg_in["pump"] == "on":
-                print("Starting Pump, pump = ",msg_in["pump"])
-                self.switch_actor_on(2) 
-            if msg_in["pump"] == "off":
-                print("Stopping Pump, pump = ",msg_in["pump"])
-                self.switch_actor_off(2)
+        try:
+            print "payload " + msg.payload        
+            json_data = json.loads(msg.payload)
+            print json_data
+            val = json_data
+            if self.payload_text is not None:
+                for key in self.payload_text:
+                    val = val.get(key, None)
+            print val
+            if isinstance(val, (int, float, basestring)):
+                q.put({"id": on_message.sensorid, "value": val})
+        except Exception as e:
+            print e
+    on_message.sensorid = self.id
+    self.api.cache["mqtt"].client.subscribe(self.topic)
+    self.api.cache["mqtt"].client.message_callback_add(self.topic, on_message)
 
-    topic="cbpi/homebrewing/uuid/commands"
-    client=mqtt.Client("cbpi_mqtt_listener_test")
-    client.on_message=on_message
-    client.connect("localhost")
-    client.loop_start()
-    client.subscribe(topic)
-    time.sleep(.1)
-    client.loop_stop()
-    client.disconnect()
-    pass
+    def get_value(self):
+        return {"value": self.last_value, "unit": self.unit}
+
+    def get_unit(self):
+        return self.unit
+
+    def stop(self):
+        self.api.cache["mqtt"].client.unsubscribe(self.topic)
+        MQTT_Listener.stop(self)
+
+    def execute(self):
+        self.sleep(5)
 
 @cbpi.initalizer(order=0)
 def initMQTT(app):
@@ -107,5 +112,5 @@ def initMQTT(app):
             except:
                 pass
 
-#    cbpi.socketio.start_background_task(target=mqtt_reader, api=app)
+    cbpi.socketio.start_background_task(target=mqtt_reader, api=app)
 
