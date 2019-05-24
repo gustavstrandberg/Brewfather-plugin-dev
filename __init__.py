@@ -15,17 +15,18 @@ import requests
 q = Queue()
 
 def on_connect(client, userdata, flags, rc):
-    print("MQTT Connected" + str(rc))
+    print("BF MQTT Connected" + str(rc))
 
-class MQTTThread (threading.Thread):
+class BFMQTTThread (threading.Thread):
 
-    def __init__(self,server,port,username,password,tls):
+    def __init__(self,server,port,username,password,tls,deviceid):
         threading.Thread.__init__(self)
         self.server = server
         self.port = port
         self.username = username
         self.password = password
         self.tls = tls
+        self.deviceid = deviceid
 
     client = None
     def run(self):
@@ -42,7 +43,7 @@ class MQTTThread (threading.Thread):
         self.client.loop_forever()
 
 @cbpi.actor
-class MQTTControlObject(ActorBase):
+class BFMQTTControlObject(ActorBase):
     topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/uuid/commands", description="MQTT TOPIC")
     object = Property.Text("Object", configurable=True, default_value="", description="Data Object, e.g. pump")
     def on(self, power=100):
@@ -52,7 +53,7 @@ class MQTTControlObject(ActorBase):
         self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({self.object: "off"}), qos=2, retain=True)
 
 @cbpi.actor
-class MQTTActorInt(ActorBase):
+class BFMQTTActorInt(ActorBase):
     topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
     def on(self, power=100):
         self.api.cache["mqtt"].client.publish(self.topic, payload=1, qos=2, retain=True)
@@ -61,21 +62,25 @@ class MQTTActorInt(ActorBase):
         self.api.cache["mqtt"].client.publish(self.topic, payload=0, qos=2, retain=True)
 
 @cbpi.sensor
-class MQTTListenerBrewfatherCommands(SensorActive):
-    a_topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/uuid/commands", description="MQTT TOPIC")
+class BFMQTTListenerCommands(SensorActive):
+    deviceid = 'c87052414df980'
+    #deviceid = Property.Text("Device ID", configurable=True, description="Device ID from Brewfather Devices configiuration.") 
+    #a_topic = 'cbpi/homebrewing/' + str(deviceid) + '/commands'
+    a_topic = Property.Text("Topic", configurable=True, default_value='cbpi/homebrewing/' + str(deviceid) + '/commands', description="Brewfather MQTT TOPIC") 
+    print "####################### a_topic = "
+    print a_topic
+    #a_topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/deviceid/commands", description="Brewfather MQTT TOPIC")
     #a_topic = "cbpi/homebrewing/uuid/commands"
     #b_payload = Property.Text("Object payload", configurable=True, default_value="", description="Object in patload, e.g. pump, leave blank for raw payload")
     #b_payload = "pump"
-    base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from MQTT.")
-    base_kettle = Property.Kettle(label="Kettle to control", description="Kettle you would like to control.")
-
+    base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from Brewfather.")
+    base_kettle = Property.Kettle(label="Kettle to control", description="Select the Kettle you would like to control from Brewfather.")
+    #deviceid = Property.Text("Device ID", configurable=True, description="Device ID from Brewfather Devices configiuration.")
+    
     last_value = None
+
     def init(self):
         self.topic = self.a_topic
-        #if self.b_payload == "":
-        #    self.payload_text = None
-        #else:
-        #    self.payload_text = self.b_payload.split('.')
         SensorActive.init(self)
         
         def on_message(client, userdata, msg):
@@ -84,7 +89,7 @@ class MQTTListenerBrewfatherCommands(SensorActive):
                 msg_decode=str(msg.payload.decode("utf-8","ignore"))
                 print "" 
                 print "==== START ====" 
-                print("MQTT data Received",msg_decode)
+                print("BF MQTT data Received",msg_decode)
                 msg_in=json.loads(msg_decode)
                 print "msg_in = "
                 print msg_in
@@ -163,38 +168,43 @@ class MQTTListenerBrewfatherCommands(SensorActive):
         self.sleep(5)
 
 @cbpi.initalizer(order=0)
-def initMQTT(app):
+def initBFMQTT(app):
 
-    server = app.get_config_parameter("MQTT_SERVER",None)
+    server = app.get_config_parameter("BF_MQTT_SERVER",None)
     if server is None:
         server = "localhost"
-        cbpi.add_config_parameter("MQTT_SERVER", "localhost", "text", "MQTT Server")
+        cbpi.add_config_parameter("BF_MQTT_SERVER", "localhost", "text", "Brewfather MQTT Server")
 
-    port = app.get_config_parameter("MQTT_PORT", None)
+    port = app.get_config_parameter("BF_MQTT_PORT", None)
     if port is None:
         port = "1883"
-        cbpi.add_config_parameter("MQTT_PORT", "1883", "text", "MQTT Sever Port")
+        cbpi.add_config_parameter("BF_MQTT_PORT", "1883", "text", "Brewfather MQTT Sever Port")
 
-    username = app.get_config_parameter("MQTT_USERNAME", None)
+    username = app.get_config_parameter("BF_MQTT_USERNAME", None)
     if username is None:
         username = "username"
-        cbpi.add_config_parameter("MQTT_USERNAME", "username", "text", "MQTT username")
+        cbpi.add_config_parameter("BF_MQTT_USERNAME", "username", "text", "Brewfather MQTT username")
 
-    password = app.get_config_parameter("MQTT_PASSWORD", None)
+    password = app.get_config_parameter("BF_MQTT_PASSWORD", None)
     if password is None:
         password = "password"
-        cbpi.add_config_parameter("MQTT_PASSWORD", "password", "text", "MQTT password")
+        cbpi.add_config_parameter("BF_MQTT_PASSWORD", "password", "text", "Brewfather MQTT password")
 
-    tls = app.get_config_parameter("MQTT_TLS", None)
+    tls = app.get_config_parameter("BF_MQTT_TLS", None)
     if tls is None:
         tls = "false"
-        cbpi.add_config_parameter("MQTT_TLS", "false", "text", "MQTT TLS")
+        cbpi.add_config_parameter("BF_MQTT_TLS", "false", "text", "Brewfather MQTT TLS")
 
-    app.cache["mqtt"] = MQTTThread(server,port,username, password, tls)
+    deviceid = app.get_config_parameter("BF_MQTT_DEVICEID", None)
+    if deviceid is None:
+        deviceid = "deviceid"
+        cbpi.add_config_parameter("BF_MQTT_DEVICEID", "Enter DeviceID", "text", "Brewfather MQTT DeviceID")
+
+    app.cache["mqtt"] = BFMQTTThread(server,port,username, password, tls, deviceid)
     app.cache["mqtt"].daemon = True
     app.cache["mqtt"].start()
     
-    def mqtt_reader(api):
+    def bfmqtt_reader(api):
         while True:
             try:
                 m = q.get(timeout=0.1)
@@ -203,4 +213,4 @@ def initMQTT(app):
             except:
                 pass
 
-    cbpi.socketio.start_background_task(target=mqtt_reader, api=app)
+    cbpi.socketio.start_background_task(target=bfmqtt_reader, api=app)
