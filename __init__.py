@@ -137,10 +137,14 @@ class MQTTListenerBrewfatherCommands(SensorActive):
 
 @cbpi.sensor
 class MQTTListenerControlActor(SensorActive):
-    a_topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
-    b_payload = Property.Text("Payload Dictioanry", configurable=True, default_value="", description="Where to find msg in patload, leave blank for raw payload")
-    c_unit = Property.Text("Unit", configurable=True, default_value="", description="Units to display")
-    base = Property.Actor(label="Base Actor", description="Select the actor you would like to control from MQTT.")
+    #a_topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
+    #b_payload = Property.Text("Payload Dictioanry", configurable=True, default_value="", description="Where to find msg in patload, leave blank for raw payload")
+    #c_unit = Property.Text("Unit", configurable=True, default_value="", description="Units to display")
+    base_pump = Property.Actor(label="Pump to control", description="Select the pump you would like to control from Brewfather.")
+    base_kettle = Property.Kettle(label="Kettle to control", description="Select the kettle you would like to control from Brewfather.")
+    a_topic = "cbpi/homebrewing/uuid/commands"
+    b_payload = "pump"
+
 
     last_value = None
     def init(self):
@@ -175,11 +179,11 @@ class MQTTListenerControlActor(SensorActive):
 
     def get_value(self):
         # Control base actor from MQTT.
-        if (self.last_value == 0) :
-                self.api.switch_actor_off(int(self.base))
+        if (self.last_value == "on") :
+                self.api.switch_actor_off(int(self.base_pump))
 #                self.api.switch_actor_on(int(self.base), power=power)
-        elif (self.last_value == 1) :
-                self.api.switch_actor_on(int(self.base))
+        elif (self.last_value == "off") :
+                self.api.switch_actor_on(int(self.base_pump))
 #                self.api.switch_actor_on(int(self.base), power=power)
 #        else:
 #                self.api.switch_actor_off(int(self.base))
