@@ -90,6 +90,8 @@ class MQTTListenerBrewfatherCommands(SensorActive):
         def on_message(client, userdata, msg):
 
             try:
+                print ""
+                print " ==== Försök 1 ===="
                 print "Payload from MQTT = " + msg.payload
 		json_data = json.loads(msg.payload)
                 print "Payload JSON = "
@@ -98,9 +100,39 @@ class MQTTListenerBrewfatherCommands(SensorActive):
                 if self.payload_text is not None:
                     for key in self.payload_text:
                         val = val.get(key, None)
-                print "VAL = " + val
+                print "val = "
+                print val
+                
                 if isinstance(val, (int, float, basestring)):
                     q.put({"id": on_message.sensorid, "value": val})
+                print "isinstance"
+                print val
+
+                print "==== Försök 1 slut ===="
+                print ""
+                print "==== NYTT FÖRSÖK ===="
+                topic=msg.topic
+                msg_decode=str(msg.payload.decode("utf-8","ignore"))
+                print("MQTT data Received",msg_decode)
+                msg_in=json.loads(msg_decode)
+                print "msg_in = "
+                print msg_in
+               
+                if "pump" in msg_in:
+                    if msg_in["pump"] == "on":
+                        #requests.post("http://localhost:5000/api/actor/2/switch/on")
+                        print("Starting Pump, pump = ",msg_in["pump"])
+                        #self.api.switch_actor_on(2)
+                        #self.switch_actor_on(2)
+                    if msg_in["pump"] == "off":
+                        #requests.post('http://localhost:5000/api/actor/2/switch/off')
+                        print("Stopping Pump, pump = ",msg_in["pump"])
+                        #self.api.switch_actor_off(2)
+                        #self.switch_actor_off(2)
+
+
+                print "==== FÖRSÖK KLART ===="
+                print ""
             except Exception as e:
                 print e
         on_message.sensorid = self.id
@@ -110,11 +142,14 @@ class MQTTListenerBrewfatherCommands(SensorActive):
 
     def get_value(self):
         # Control base actor from MQTT.
+        print "self.last_value = "
+        print self.last_value 
         if (self.last_value == "off") :
                 self.api.switch_actor_off(int(self.base_pump))
+                print "Pump2 OFF"
         elif (self.last_value == "on") :
                 self.api.switch_actor_on(int(self.base_pump))
-
+                print "Pump2 ON"
         return {"value": self.last_value}
 
     def get_unit(self):
@@ -163,14 +198,22 @@ class MQTTListenerControlActor(SensorActive):
                 json_data = json.loads(msg.payload)
                 #print json_data
                 print json_data
-                val = json_data
-                if self.payload_text is not None:
-                    for key in self.payload_text:
-                        val = val.get(key, None)
+                print "==== NYTT FÖRSÖK ==== "
+                #val = json_data
+                #if self.payload_text is not None:
+                #    for key in self.payload_text:
+                #        val = val.get(key, None)
                 #print val
-                print val
-                if isinstance(val, (int, float, basestring)):
-                    q.put({"id": on_message.sensorid, "value": val})
+                #print val
+                #if isinstance(val, (int, float, basestring)):
+                #    q.put({"id": on_message.sensorid, "value": val})
+
+                topic=msg.topic
+                msg_decode=str(msg.payload.decode("utf-8","ignore"))
+                print("MQTT data Received",msg_decode)
+                msg_in=json.loads(msg_decode)
+                print "msg_in = "
+                print msg_in
             except Exception as e:
                 print e
         on_message.sensorid = self.id
