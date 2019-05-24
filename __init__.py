@@ -41,20 +41,9 @@ class MQTTThread (threading.Thread):
         self.client.connect(str(self.server), int(self.port), 60)
         self.client.loop_forever()
 
-
-@cbpi.actor
-class MQTTActorJson(ActorBase):
-    topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
-    def on(self, power=100):
-        self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({"state": "on"}), qos=2, retain=True)
-
-    def off(self):
-        self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({"state": "off"}), qos=2, retain=True)
-
 @cbpi.actor
 class MQTTControlObject(ActorBase):
-    #topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/MQTT_USERNAME/commands", description="MQTT TOPIC")
-    topic = "cbpi/homebrewing/uuid/commands"
+    topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/uuid/commands", description="MQTT TOPIC")
     object = Property.Text("Object", configurable=True, default_value="", description="Data Object, e.g. pump")
     def on(self, power=100):
         self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({self.object: "on"}), qos=2, retain=True)
@@ -73,83 +62,70 @@ class MQTTActorInt(ActorBase):
 
 @cbpi.sensor
 class MQTTListenerBrewfatherCommands(SensorActive):
-#    a_topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
-    a_topic = "cbpi/homebrewing/uuid/commands"
+    a_topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/uuid/commands", description="MQTT TOPIC")
+    #a_topic = "cbpi/homebrewing/uuid/commands"
     #b_payload = Property.Text("Object payload", configurable=True, default_value="", description="Object in patload, e.g. pump, leave blank for raw payload")
+    #b_payload = "pump"
     base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from MQTT.")
-    base_automatic = Property.Kettle(label="Kettle to control", description="Kettle you would like to control.")
-    b_payload = "pump"
+    base_kettle = Property.Kettle(label="Kettle to control", description="Kettle you would like to control.")
 
     last_value = None
     def init(self):
         self.topic = self.a_topic
-        if self.b_payload == "":
-            self.payload_text = None
-        else:
-            self.payload_text = self.b_payload.split('.')
+        #if self.b_payload == "":
+        #    self.payload_text = None
+        #else:
+        #    self.payload_text = self.b_payload.split('.')
         SensorActive.init(self)
+        
         def on_message(client, userdata, msg):
 
             try:
- #               print ""
- #               print " ==== Försök 1 ===="
- #               print "Payload from MQTT = " + msg.payload
-#		json_data = json.loads(msg.payload)
-#                print "Payload JSON = "
-#                print json_data
-#                val = json_data
-                #if self.payload_text is not None:
-                #    for key in self.payload_text:
-                #        val = val.get(key, None)
- #               print "val = "
- #               print val
-                
-  #              if isinstance(msg.payload, (basestring)):
-  #                  q.put(msg.payload)
-
-#fundera kring denna nästa gång, den startar get_value     på något sätt
-                
-                #if isinstance(val, (int, float, basestring)):
-                #    q.put({"id": on_message.sensorid, "value": val})
-   #             print "isinstance"
-   #             print val
-
-    #            print "==== Försök 1 slut ===="
-    #            print ""
-                
-                
-                print "==== NYTT FÖRSÖK ===="
-                #topic=msg.topic
                 msg_decode=str(msg.payload.decode("utf-8","ignore"))
-                #print("MQTT data Received",msg_decode)
+                print "" 
+                print "==== START ====" 
+                print("MQTT data Received",msg_decode)
                 msg_in=json.loads(msg_decode)
                 print "msg_in = "
                 print msg_in
-                print "==== NYTT FÖRSÖK SLUT ====" 
-                print "return msg_in" 
-                #return msg_in
+                print "==== SLUT ====" 
 
                 if "pump" in msg_in:
                     if msg_in["pump"] == "on":
-                        requests.post("http://localhost:5000/api/actor/2/switch/on")
-                        print("Starting Pump, pump = ",msg_in["pump"])
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
+                        print("Starting Pump")
                         #self.api.switch_actor_on(2)
-                        #self.switch_actor_on(2)
                     if msg_in["pump"] == "off":
-                        requests.post('http://localhost:5000/api/actor/2/switch/off')
-                        print("Stopping Pump, pump = ",msg_in["pump"])
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
+                        print("Stopping Pump")
                         #self.api.switch_actor_off(2)
-                        #self.switch_actor_off(2)
 
+                if "start" in msg_in:
+                    if msg_in["start"] == "auto":
+                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic") 
+                        print("Set kettle to automatic start") 
+                
+                if "recipe" in msg_in:
+                    if msg_in["recipe"] == 1:
+                        requests.post("http://localhost:5000/api/step/start")
+                        print("Step start")
 
-                print "==== FÖRSÖK KLART ===="
+                if "stop" in msg_in:
+                    if msg_in["stop"] == "true":
+                        requests.post("http://localhost:5000/api/step/reset")
+                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
+                        print("Stopping step")
+                #elif "stop" in msg_in:
+                #    if msg_in["stop]" == "auto":
+                #        print("St Brew, start = ",msg_in["start"])
+                #    if msg_in["stop"] == "true":
+                #        print("Stopping Brew, start = ",msg_in["start"])
+
             except Exception as e:
                 print e
-        #on_message.msg_out = self.msg_in
-        #self.api.cache["mqtt"].client.subscribe(self.topic)
-        #self.api.cache["mqtt"].client.message_callback_add(self.topic, on_message)
         
-        on_message.sensorid = self.id
+        #on_message.sensorid = self.id
         self.api.cache["mqtt"].client.subscribe(self.topic)
         self.api.cache["mqtt"].client.message_callback_add(self.topic, on_message)
 
@@ -184,217 +160,6 @@ class MQTTListenerBrewfatherCommands(SensorActive):
         :return:
         '''
 
-#	f.close()
-
-        self.sleep(5)
-
-@cbpi.sensor
-class MQTTListenerControlActor(SensorActive):
-    #a_topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
-    #b_payload = Property.Text("Payload Dictioanry", configurable=True, default_value="", description="Where to find msg in patload, leave blank for raw payload")
-    #c_unit = Property.Text("Unit", configurable=True, default_value="", description="Units to display")
-    base_pump = Property.Actor(label="Pump to control", description="Select the pump you would like to control from Brewfather.")
-    base_kettle = Property.Kettle(label="Kettle to control", description="Select the kettle you would like to control from Brewfather.")
-    a_topic = "cbpi/homebrewing/uuid/commands"
-    b_payload = "pump"
-
-
-    last_value = None
-    def init(self):
-        self.topic = self.a_topic
-        if self.b_payload == "":
-            self.payload_text = None
-        else:
-            self.payload_text = self.b_payload.split('.')
-        self.unit = self.c_unit[0:3]
-
-        SensorActive.init(self)
-        def on_message(client, userdata, msg):
-
-            try:
-                print "payload " + msg.payload
-                json_data = json.loads(msg.payload)
-                #print json_data
-                print json_data
-                print "==== NYTT FÖRSÖK ==== "
-                #val = json_data
-                #if self.payload_text is not None:
-                #    for key in self.payload_text:
-                #        val = val.get(key, None)
-                #print val
-                #print val
-                #if isinstance(val, (int, float, basestring)):
-                #    q.put({"id": on_message.sensorid, "value": val})
-
-                topic=msg.topic
-                msg_decode=str(msg.payload.decode("utf-8","ignore"))
-                print("MQTT data Received",msg_decode)
-                msg_in=json.loads(msg_decode)
-                print "msg_in = "
-                print msg_in
-            except Exception as e:
-                print e
-        on_message.sensorid = self.id
-        self.api.cache["mqtt"].client.subscribe(self.topic)
-        self.api.cache["mqtt"].client.message_callback_add(self.topic, on_message)
-
-    def get_value(self):
-        # Control base actor from MQTT.
-        if (self.last_value == "on") :
-                self.api.switch_actor_off(int(self.base_pump))
-#                self.api.switch_actor_on(int(self.base), power=power)
-        elif (self.last_value == "off") :
-                self.api.switch_actor_on(int(self.base_pump))
-#                self.api.switch_actor_on(int(self.base), power=power)
-#        else:
-#                self.api.switch_actor_off(int(self.base))
-
-        return {"value": self.last_value, "unit": self.unit}
-
-    def get_unit(self):
-        return self.unit
-
-    def stop(self):
-        self.api.cache["mqtt"].client.unsubscribe(self.topic)
-        SensorActive.stop(self)
-
-    def execute(self):
-
-        '''
-        Active sensor has to handle his own loop
-        :return:
-        '''
-        self.sleep(5)
-
-@cbpi.sensor
-class MQTTListenerControlStep(SensorActive):
-    a_topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
-    b_payload = Property.Text("Object in payload", configurable=True, default_value="", description="Object in patload, e.g. pump, leave blank for raw payload")
-    #c_unit = Property.Text("Unit", configurable=True, default_value="", description="Units to display")
-    
-    last_value = None
-    def init(self):
-        self.topic = self.a_topic
-        if self.b_payload == "":
-            self.payload_text = None
-        else:
-            self.payload_text = self.b_payload.split('.')
-        #self.unit = self.c_unit[0:3]
-
-        SensorActive.init(self)
-        def on_message(client, userdata, msg):
-
-            try:
-                print "payload " + msg.payload
-                json_data = json.loads(msg.payload)
-                #print json_data
-                print json_data
-                val = json_data
-                if self.payload_text is not None:
-                    for key in self.payload_text:
-                        val = val.get(key, None)
-                #print val
-                print val
-                if isinstance(val, (int, float, basestring)):
-                    q.put({"id": on_message.sensorid, "value": val})
-            except Exception as e:
-                print e
-        on_message.sensorid = self.id
-        self.api.cache["mqtt"].client.subscribe(self.topic)
-        self.api.cache["mqtt"].client.message_callback_add(self.topic, on_message)
-
-    def get_value(self):
-        # Control steo from MQTT.
-        if (self.last_value == 0) :
-                #StepView.stop()
-		print "stop"
-        elif (self.last_value == 1) :
-                #StepView.start()
-		print "start"
-
-#        return {"value": self.last_value, "unit": self.unit}
-        return {"value": self.last_value}
-
-#    def get_unit(self):
-#        return self.unit
-
-    def stop(self):
-        self.api.cache["mqtt"].client.unsubscribe(self.topic)
-        SensorActive.stop(self)
-
-    def execute(self):
-
-        '''
-        Active sensor has to handle his own loop
-        :return:
-        '''
-        self.sleep(5)
-
-@cbpi.sensor
-class MQTTListenerKettleAuto(SensorActive):
-    a_topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
-    b_payload = Property.Text("Payload Dictioanry", configurable=True, default_value="", description="Where to find msg in patload, leave blank for raw payload")
-    c_unit = Property.Text("Unit", configurable=True, default_value="", description="Units to display")
-    kettleid = Property.Kettle(label="Kettle id", description="Select the Kettle id you would like to control from MQTT.")
-	
-    last_value = None
-    def init(self):
-        self.topic = self.a_topic
-        if self.b_payload == "":
-            self.payload_text = None
-        else:
-            self.payload_text = self.b_payload.split('.')
-        self.unit = self.c_unit[0:3]
-
-        SensorActive.init(self)
-        def on_message(client, userdata, msg):
-
-            try:
-                print "payload " + msg.payload
-                json_data = json.loads(msg.payload)
-                #print json_data
-                print json_data
-                val = json_data
-                if self.payload_text is not None:
-                    for key in self.payload_text:
-                        val = val.get(key, None)
-                #print val
-                print val
-                if isinstance(val, (int, float, basestring)):
-                    q.put({"id": on_message.sensorid, "value": val})
-            except Exception as e:
-                print e
-        on_message.sensorid = self.id
-        self.api.cache["mqtt"].client.subscribe(self.topic)
-        self.api.cache["mqtt"].client.message_callback_add(self.topic, on_message)
-
-    def get_value(self):
-        # Control Kettle from MQTT.
-        #if (self.last_value == 0) :
-                #Kettle2View().toggle(kettleid)
-		#Kettle2View().toggle(1)
-	#	print "toggle"
-        #elif (self.last_value == 1) :
-                #Kettle2View().toggle(kettleid)
-#		Kettle2View().toggle(1)
-#		print "toggle"
-	Kettle2View().toggle(1)	
-
-        return {"value": self.last_value, "unit": self.unit}
-
-    def get_unit(self):
-        return self.unit
-
-    def stop(self):
-        self.api.cache["mqtt"].client.unsubscribe(self.topic)
-        SensorActive.stop(self)
-
-    def execute(self):
-
-        '''
-        Active sensor has to handle his own loop
-        :return:
-        '''
         self.sleep(5)
 
 @cbpi.initalizer(order=0)
@@ -433,8 +198,8 @@ def initMQTT(app):
         while True:
             try:
                 m = q.get(timeout=0.1)
-                api.cache.get("sensors")[m.get("id")].instance.last_value = m.get("value")
-                api.receive_sensor_value(m.get("id"), m.get("value"))
+                #api.cache.get("sensors")[m.get("id")].instance.last_value = m.get("value")
+                #api.receive_sensor_value(m.get("id"), m.get("value"))
             except:
                 pass
 
