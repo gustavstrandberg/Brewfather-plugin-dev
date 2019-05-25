@@ -30,7 +30,7 @@ class BFMQTTThread (threading.Thread):
 
     client = None
     def run(self):
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(self.deviceid)
         self.client.on_connect = on_connect
 
         if self.username != "username" and self.password != "password":
@@ -63,6 +63,7 @@ class BFMQTTActorInt(ActorBase):
 
 @cbpi.sensor
 class BFMQTTListenerCommands(SensorActive):
+    
     deviceid = 'c87052414df980'
     #deviceid = Property.Text("Device ID", configurable=True, description="Device ID from Brewfather Devices configiuration.") 
     #a_topic = 'cbpi/homebrewing/' + str(deviceid) + '/commands'
