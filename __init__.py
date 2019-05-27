@@ -78,17 +78,11 @@ class BFMQTTListenerCommands(SensorActive):
 
             try:
                 msg_decode=str(msg.payload.decode("utf-8","ignore"))
-                print "" 
-                print "==== START ====" 
-                print("BF MQTT data Received",msg_decode)
                 msg_in=json.loads(msg_decode)
-                print "msg_in = "
-                print msg_in
-                
-                #deviceid = self.get_config_parameter("BF_MQTT_DEVICEID", None) 
-                #print "DeviceId =i " 
-                #print deviceid
-                print "==== SLUT ====" 
+
+                print "=================================" 
+                print("BF MQTT Data Received",msg_decode)
+                print "=================================" 
 
                 if "pump" in msg_in:
                     if msg_in["pump"] == "on":
@@ -104,9 +98,9 @@ class BFMQTTListenerCommands(SensorActive):
 
                 if "start" in msg_in:
                     if msg_in["start"] == "auto":
-                        #kolla om automatic är på
-                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic") 
-                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
+                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
+                        if self.kettle_auto.json()["state"] == False:
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic") 
                         print("Set kettle to automatic start") 
                 
                 if "recipe" in msg_in:
@@ -118,26 +112,30 @@ class BFMQTTListenerCommands(SensorActive):
                         print("Step start")
 
                 if "stop" in msg_in:
-                    if msg_in["stop"] == "true":
+                    if msg_in["stop"] == True:
                         requests.post("http://localhost:5000/api/step/reset")
-                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
-                        # kolla om automatic är på
+                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
+                        if self.kettle_auto.json()["state"] == True:
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
                         self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "stop"}), qos=1, retain=True)
                         print("Stopping step")
 
                 if "pause" in msg_in:
-                    if msg_in["pause"] == "true":
-                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
+                    if msg_in["pause"] == True:
+                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
+                        if self.kettle_auto.json()["state"] == True:
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
                         self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pause"}), qos=1, retain=True)
-                    if msg_in["pause"] == "false":
-                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
+                    if msg_in["pause"] == False:
+                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
+                        if self.kettle_auto.json()["state"] == False:
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
                         self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "resume"}), qos=1, retain=True)
 
                 if "mash SP" in msg_in:
-    #                   if msg_in["mash SP"] == "true":
                     self.settemp = str(msg_in["mash SP"])
                     requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/targettemp/"  + self.settemp)
                     self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "_SP_"}), qos=1, retain=True)
