@@ -63,25 +63,15 @@ class BFMQTTActorInt(ActorBase):
 
 @cbpi.sensor
 class BFMQTTListenerCommands(SensorActive):
-    
-    deviceid = 'c87052414df980'
-    #deviceid = Property.Text("Device ID", configurable=True, description="Device ID from Brewfather Devices configiuration.") 
-    #a_topic = 'cbpi/homebrewing/' + str(deviceid) + '/commands'
-    a_topic = Property.Text("Topic", configurable=True, default_value='cbpi/homebrewing/' + str(deviceid) + '/commands', description="Brewfather MQTT TOPIC") 
-    print "####################### a_topic = "
-    print a_topic
-    #a_topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/deviceid/commands", description="Brewfather MQTT TOPIC")
-    #a_topic = "cbpi/homebrewing/uuid/commands"
-    #b_payload = Property.Text("Object payload", configurable=True, default_value="", description="Object in patload, e.g. pump, leave blank for raw payload")
-    #b_payload = "pump"
     base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from Brewfather.")
     base_kettle = Property.Kettle(label="Kettle to control", description="Select the Kettle you would like to control from Brewfather.")
-    #deviceid = Property.Text("Device ID", configurable=True, description="Device ID from Brewfather Devices configiuration.")
+    base_heater = Property.Actor(label="Heater Actor", description="Select the heater actor whose power you would like to control from Brewfather.")
     
     last_value = None
 
     def init(self):
-        self.topic = self.a_topic
+        self.commands_topic = self.get_config_parameter("BF_MQTT_COMMANDS_TOPIC", None) 
+        self.events_topic = self.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
         SensorActive.init(self)
         
         def on_message(client, userdata, msg):
@@ -94,34 +84,73 @@ class BFMQTTListenerCommands(SensorActive):
                 msg_in=json.loads(msg_decode)
                 print "msg_in = "
                 print msg_in
+                
+                #deviceid = self.get_config_parameter("BF_MQTT_DEVICEID", None) 
+                #print "DeviceId =i " 
+                #print deviceid
                 print "==== SLUT ====" 
 
                 if "pump" in msg_in:
                     if msg_in["pump"] == "on":
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
+                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pump on"}), qos=1, retain=True)
                         print("Starting Pump")
                         #self.api.switch_actor_on(2)
                     if msg_in["pump"] == "off":
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
+                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pump auto"}), qos=1, retain=True)
                         print("Stopping Pump")
                         #self.api.switch_actor_off(2)
 
                 if "start" in msg_in:
                     if msg_in["start"] == "auto":
+                        #kolla om automatic är på
                         requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic") 
+                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
                         print("Set kettle to automatic start") 
                 
                 if "recipe" in msg_in:
                     if msg_in["recipe"] == 1:
                         requests.post("http://localhost:5000/api/step/start")
+                        requests.post("http://localhost:5000/api/step/action/start")
+                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"time":0, "event": "recipe 1"}), qos=1, retain=True)
+                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"time":0, "event": "start"}), qos=1, retain=True) 
                         print("Step start")
 
                 if "stop" in msg_in:
                     if msg_in["stop"] == "true":
                         requests.post("http://localhost:5000/api/step/reset")
                         requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
+                        # kolla om automatic är på
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
+                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "stop"}), qos=1, retain=True)
                         print("Stopping step")
+
+                if "pause" in msg_in:
+                    if msg_in["pause"] == "true":
+                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
+                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pause"}), qos=1, retain=True)
+                    if msg_in["pause"] == "false":
+                        requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
+                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "resume"}), qos=1, retain=True)
+
+                if "mash SP" in msg_in:
+    #                   if msg_in["mash SP"] == "true":
+                    self.settemp = str(msg_in["mash SP"])
+                    requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/targettemp/"  + self.settemp)
+                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "_SP_"}), qos=1, retain=True)
+
+                if "PWM" in msg_in:
+                    self.pwm = str(msg_in["PWM"])
+                    requests.post("http://localhost:5000/api/actor/"  + self.base_heater + "/power/" + self.pwm)
+                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "_PWM_"}), qos=1, retain=True)
+
+  #             if "countdown" in msg_in:
+  #                 requests.post("http://localhost:5000/api/actor/"  + self.base_heater + "/power/" + msg_in["PWM"] )
+  #                 self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "_PWM_"}), qos=1, retain=True)
+
                 #elif "stop" in msg_in:
                 #    if msg_in["stop]" == "auto":
                 #        print("St Brew, start = ",msg_in["start"])
@@ -132,8 +161,8 @@ class BFMQTTListenerCommands(SensorActive):
                 print e
         
         #on_message.sensorid = self.id
-        self.api.cache["mqtt"].client.subscribe(self.topic)
-        self.api.cache["mqtt"].client.message_callback_add(self.topic, on_message)
+        self.api.cache["mqtt"].client.subscribe(self.commands_topic)
+        self.api.cache["mqtt"].client.message_callback_add(self.commands_topic, on_message)
 
 
 #    def get_value(self):
@@ -156,11 +185,13 @@ class BFMQTTListenerCommands(SensorActive):
  #       return self.unit
 
     def stop(self):
-        self.api.cache["mqtt"].client.unsubscribe(self.topic)
+        self.api.cache["mqtt"].client.unsubscribe(self.commands_topic)
         SensorActive.stop(self)
 
     def execute(self):
 
+        #deviceid = self.get_config_parameter("BF_MQTT_DEVICEID", None)
+        #a_topic = self.get_config_parameter("BF_MQTT_DEVICEID", None)
         '''
         Active sensor has to handle his own loop
         :return:
@@ -199,7 +230,23 @@ def initBFMQTT(app):
     deviceid = app.get_config_parameter("BF_MQTT_DEVICEID", None)
     if deviceid is None:
         deviceid = "deviceid"
-        cbpi.add_config_parameter("BF_MQTT_DEVICEID", "Enter DeviceID", "text", "Brewfather MQTT DeviceID")
+        cbpi.add_config_parameter("BF_MQTT_DEVICEID", "***Enter Device ID***", "text", "Brewfather MQTT DeviceID")
+
+    commands_topic = app.get_config_parameter("BF_MQTT_COMMANDS_TOPIC", None)
+    if commands_topic is None:
+        commands_topic = "cbpi/homebrewing/" + deviceid + "/commands"
+        cbpi.add_config_parameter("BF_MQTT_COMMANDS_TOPIC", "cbpi/homebrewing/" + deviceid + "commands", "text", "Brewfather MQTT Commands Topic")
+
+    events_topic = app.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
+    if events_topic is None:
+        events_topic = "cbpi/homebrewing/" + deviceid + "/events/auto"
+        cbpi.add_config_parameter("BF_MQTT_EVENTS_TOPIC", "cbpi/homebrewing/" + deviceid + "/events/auto", "text", "Brewfather MQTT Events Topic")
+
+    dynamicmash_topic = app.get_config_parameter("BF_MQTT_DYNAMICMASH_TOPIC", None)
+    if dynamicmash_topic is None:
+        dynamicmash_topic = "cbpi/homebrewing/" + deviceid + "/dynamic/mash"
+        cbpi.add_config_parameter("BF_MQTT_DYNAMICMASH_TOPIC", "cbpi/homebrewing/" + deviceid + "/dynamic/mash", "text", "Brewfather MQTT Dynamic Mash Topic")
+
 
     app.cache["mqtt"] = BFMQTTThread(server,port,username, password, tls, deviceid)
     app.cache["mqtt"].daemon = True
