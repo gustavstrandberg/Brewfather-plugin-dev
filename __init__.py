@@ -65,8 +65,8 @@ class BF_MQTT_ActorInt(ActorBase):
 class BF_MQTT_ListenerCommands(SensorActive):
     base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from Brewfather.")
     base_kettle = Property.Kettle(label="Kettle to control", description="Select the Kettle you would like to control from Brewfather.")
-    base_heater = Property.Actor(label="Heater Actor", description="Select the heater actor whose power you would like to control from Brewfather.")
-    
+    base_heater = Property.Actor(label="Mash Heater Actor", description="Select the mash heater actor whose power you would like to control from Brewfather.")
+    base_hltheater = Property.Actor(label="HLT Heater Actor", description="Select the HTL heater actor whose power you would like to control from Brewfather.") 
     last_value = None
 
     def init(self):
@@ -122,28 +122,38 @@ class BF_MQTT_ListenerCommands(SensorActive):
                         print("Stopping step")
 
                 if "pause" in msg_in:
-                    if msg_in["pause"] == True:
+                    #
+                    #nån kontoll så man inte kan pausa om redan pausat.
+                    #
+                    if msg_in["pause"] == True and self.pause != True:
                         self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
                         if self.kettle_auto.json()["state"] == True:
                             requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
                         self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pause"}), qos=1, retain=True)
-                    if msg_in["pause"] == False:
+                        self.pause = True 
+                    if msg_in["pause"] == False and self.pause == True:
                         self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
                         if self.kettle_auto.json()["state"] == False:
                             requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
                         requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
                         self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "resume"}), qos=1, retain=True)
+                        self.pause = False
 
                 if "mash SP" in msg_in:
                     self.settemp = str(msg_in["mash SP"])
                     requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/targettemp/"  + self.settemp)
-                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "_SP_"}), qos=1, retain=True)
+                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "Set Target Temp = " + self.settemp}), qos=1, retain=True)
 
                 if "PWM" in msg_in:
                     self.pwm = str(msg_in["PWM"])
                     requests.post("http://localhost:5000/api/actor/"  + self.base_heater + "/power/" + self.pwm)
-                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "_PWM_"}), qos=1, retain=True)
+                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "Set Power = " + self.pwm}), qos=1, retain=True)
+
+                if "HLT SP" in msg_in:
+                    self.hltsp = str(msg_in["HLT SP"])
+                    requests.post("http://localhost:5000/api/actor/"  + self.base_heaterHLT + "/power/" + self.hltsp)
+                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltskp}), qos=1, retain=True)
 
   #             if "countdown" in msg_in:
   #                 requests.post("http://localhost:5000/api/actor/"  + self.base_heater + "/power/" + msg_in["PWM"] )
@@ -187,7 +197,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
         SensorActive.stop(self)
 
     def execute(self):
-
+        self.pause = False
         #deviceid = self.get_config_parameter("BF_MQTT_DEVICEID", None)
         #a_topic = self.get_config_parameter("BF_MQTT_DEVICEID", None)
         '''
@@ -276,7 +286,7 @@ def initBFMQTT(app):
     commands_topic = app.get_config_parameter("BF_MQTT_COMMANDS_TOPIC", None)
     if commands_topic is None:
         commands_topic = "cbpi/homebrewing/" + deviceid + "/commands"
-        cbpi.add_config_parameter("BF_MQTT_COMMANDS_TOPIC", "cbpi/homebrewing/" + deviceid + "commands", "text", "Brewfather MQTT Commands Topic")
+        cbpi.add_config_parameter("BF_MQTT_COMMANDS_TOPIC", "cbpi/homebrewing/" + deviceid + "/commands", "text", "Brewfather MQTT Commands Topic")
 
     events_topic = app.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
     if events_topic is None:
