@@ -17,7 +17,7 @@ q = Queue()
 def on_connect(client, userdata, flags, rc):
     print("BF MQTT Connected" + str(rc))
 
-class BFMQTTThread (threading.Thread):
+class BF_MQTT_Thread (threading.Thread):
 
     def __init__(self,server,port,username,password,tls,deviceid):
         threading.Thread.__init__(self)
@@ -43,7 +43,7 @@ class BFMQTTThread (threading.Thread):
         self.client.loop_forever()
 
 @cbpi.actor
-class BFMQTTControlObject(ActorBase):
+class BF_MQTT_ControlObject(ActorBase):
     topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/uuid/commands", description="MQTT TOPIC")
     object = Property.Text("Object", configurable=True, default_value="", description="Data Object, e.g. pump")
     def on(self, power=100):
@@ -53,7 +53,7 @@ class BFMQTTControlObject(ActorBase):
         self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({self.object: "off"}), qos=2, retain=True)
 
 @cbpi.actor
-class BFMQTTActorInt(ActorBase):
+class BF_MQTT_ActorInt(ActorBase):
     topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
     def on(self, power=100):
         self.api.cache["mqtt"].client.publish(self.topic, payload=1, qos=2, retain=True)
@@ -62,7 +62,7 @@ class BFMQTTActorInt(ActorBase):
         self.api.cache["mqtt"].client.publish(self.topic, payload=0, qos=2, retain=True)
 
 @cbpi.sensor
-class BFMQTTListenerCommands(SensorActive):
+class BF_MQTT_ListenerCommands(SensorActive):
     base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from Brewfather.")
     base_kettle = Property.Kettle(label="Kettle to control", description="Select the Kettle you would like to control from Brewfather.")
     base_heater = Property.Actor(label="Heater Actor", description="Select the heater actor whose power you would like to control from Brewfather.")
@@ -197,6 +197,49 @@ class BFMQTTListenerCommands(SensorActive):
 
         self.sleep(5)
 
+@cbpi.backgroundtask(key='BFMQTT_DynamicMash', interval=1)                     # create bg job with an interval of 2.5 seconds 
+def BFMQTT_DynamicMash_background_task(self):
+    
+    self.events_topic = cbpi.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
+    self.dynamicmash_topic = cbpi.get_config_parameter("BF_MQTT_DYNAMICMASH_TOPIC", None)
+    #step = cbpi.cache.get("active_step")
+   
+    for idx, value in cbpi.cache["kettle"].iteritems():
+        current_sensor_value = cbpi.get_sensor_value(value.sensor)
+        self.kettlename = value.name
+        self.target_temp = value.target_temp
+        self.current_temp = current_sensor_value
+        if value.state == True:
+            self.mode = "auto"
+        if value.state == False:
+            self.mode = "manual"
+
+    for idx, value in cbpi.cache["actors"].iteritems():
+        if "pump" in value.name.lower():
+            if value.state == 1:
+                self.pump_state = "on"
+            if value.state == 0:
+                self.pump_state = "off"
+        if "gheater" in value.name.lower():
+            if value.state == 1:
+                self.heater = value.power
+            if value.state == 0:
+                self.heater = "0"
+
+    data = {                                                          # define the playload
+    'time': 0,
+    'countdown': 0,
+    'countup': 0,
+    'pump': self.pump_state,
+    'SP': self.target_temp,
+    'heater': self.heater,
+    'mode': self.mode,
+    'temp': self.current_temp,
+    'unit': cbpi.get_config_parameter("unit", None) 
+    } 
+        
+    self.cache["mqtt"].client.publish(self.dynamicmash_topic, payload=json.dumps(data), qos=1, retain=True)
+
 @cbpi.initalizer(order=0)
 def initBFMQTT(app):
 
@@ -246,7 +289,7 @@ def initBFMQTT(app):
         cbpi.add_config_parameter("BF_MQTT_DYNAMICMASH_TOPIC", "cbpi/homebrewing/" + deviceid + "/dynamic/mash", "text", "Brewfather MQTT Dynamic Mash Topic")
 
 
-    app.cache["mqtt"] = BFMQTTThread(server,port,username, password, tls, deviceid)
+    app.cache["mqtt"] = BF_MQTT_Thread(server,port,username, password, tls, deviceid)
     app.cache["mqtt"].daemon = True
     app.cache["mqtt"].start()
     
