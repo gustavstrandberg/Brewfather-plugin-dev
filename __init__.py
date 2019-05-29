@@ -19,8 +19,11 @@ import os, re, threading, time
 import requests
 
 q = Queue()
-base_mashkettle_id = None
-base_hltkettle_id = None
+mashkettle_id = None
+hltkettle_id = None
+pump_id = None
+mashheater_id = None
+hltheater_id = None
 
 def on_connect(client, userdata, flags, rc):
     print("BF MQTT Connected" + str(rc))
@@ -84,10 +87,17 @@ class BF_MQTT_ListenerCommands(SensorActive):
         self.events_topic = self.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
         SensorActive.init(self)
        
-        global base_mashkettle_id
-        global base_hltkettle_id
-        base_mashkettle_id = self.base_mashkettle
-        base_hltkettle_id = self.base_hltkettle 
+        global mashkettle_id
+        global hltkettle_id
+        global pump_id
+        global mashheater_id
+        global hltheater_id
+        mashkettle_id = self.base_mashkettle
+        hltkettle_id = self.base_hltkettle 
+        pump_id = self.base_pump
+        mashheater_id = self.base_mashheater
+        hltheater_id = self.base_hltheater
+
 
         def on_message(client, userdata, msg):
 
@@ -227,8 +237,11 @@ class BF_MQTT_ListenerCommands(SensorActive):
 @cbpi.backgroundtask(key='BFMQTT_DynamicMash', interval=1)                     # create bg job with an interval of 2.5 seconds 
 def BFMQTT_DynamicMash_background_task(self):
 
-    global base_mashkettle_id
-    global base_hltkettle_id
+    global mashkettle_id
+    global hltkettle_id
+    global pump_id
+    global mashheater_id
+    global hltheater_id
   
     self.events_topic = cbpi.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
     self.dynamicmash_topic = cbpi.get_config_parameter("BF_MQTT_DYNAMICMASH_TOPIC", None)
@@ -236,46 +249,84 @@ def BFMQTT_DynamicMash_background_task(self):
     #step = cbpi.cache.get("active_step")
     #kettle = cbpi.cache.get("kettle")
     
-    print "base_kettleid = ", base_mashkettle_id
-    print "base_hltkettleid = ", base_hltkettle_id
-
     for idx, value in cbpi.cache["kettle"].iteritems():
-        #if value.id == base_kettleid:
-        #   print "********* basekettle identified"
-        current_sensor_value = cbpi.get_sensor_value(value.sensor)
-        self.kettlename = value.name
-        self.target_temp = value.target_temp
-        self.current_temp = current_sensor_value
-        if value.state == True:
-            self.mode = "auto"
-        if value.state == False:
-            self.mode = "manual"
+        try:
+            if value.id == int(mashkettle_id):
+                self.mash = True 
+                self.mash_target_temp = value.target_temp
+                self.mash_current_temp = cbpi.get_sensor_value(value.sensor)
+                if value.state == True:
+                    self.mash_mode = "auto"
+                if value.state == False:
+                    self.mash_mode = "manual"
+        except:
+            self.mash = False
+
+        try: 
+            if value.id ==  int(hltkettle_id):
+                self.HLT = True 
+                self.hlt_target_temp = value.target_temp
+                self.hlt_current_temp = cbpi.get_sensor_value(value.sensor)
+                if value.state == True:
+                    self.hlt_mode = "auto"
+                if value.state == False:
+                    self.hlt_mode = "manual"
+        except:
+            self.HLT = False    
 
     for idx, value in cbpi.cache["actors"].iteritems():
-        if "pump" in value.name.lower():
-            if value.state == 1:
-                self.pump_state = "on"
-            if value.state == 0:
-                self.pump_state = "off"
-        if "gheater" in value.name.lower():
-            if value.state == 1:
-                self.heater = value.power
-            if value.state == 0:
-                self.heater = "0"
+        try:
+            if value.id == int(pump_id):
+                if value.state == 1:
+                    self.pump_state = "on"
+                if value.state == 0:
+                    self.pump_state = "off"
+            if value.id == int(mashheater_id):
+                if value.state == 1:
+                    self.mash_heater = value.power
+                if value.state == 0:
+                    self.mash_heater = "0"
+        except:
+            self.mash = False
 
-    data = {                                                          # define the playload
-    'time': 0,
-    'countdown': 0,
-    'countup': 0,
-    'pump': self.pump_state,
-    'SP': self.target_temp,
-    'heater': self.heater,
-    'mode': self.mode,
-    'temp': self.current_temp,
-    'unit': cbpi.get_config_parameter("unit", None) 
-    } 
-        
-    self.cache["mqtt"].client.publish(self.dynamicmash_topic, payload=json.dumps(data), qos=0, retain=True)
+        try:
+            if value.id == int(hltheater_id):
+                if value.state == 1:
+                    self.hlt_heater = value.power
+                if value.state == 0:
+                    self.hlt_heater = "0"
+        except:
+            self.HLT = False
+
+    if self.mash:
+        dynamic_mash_data = {                                                          # define the playload
+        'time': 0,
+        'countdown': 0,
+        'countup': 0,
+        'pump': self.pump_state,
+        'SP': self.mash_target_temp,
+        'heater': self.mash_heater,
+        'mode': self.mash_mode,
+        'temp': self.mash_current_temp,
+        'unit': cbpi.get_config_parameter("unit", None) 
+        } 
+  
+        print dynamic_mash_data
+        self.cache["mqtt"].client.publish(self.dynamicmash_topic, payload=json.dumps(dynamic_mash_data), qos=0, retain=True)
+
+    if self.HLT:
+        dynamic_hlt_data = {                                                          # define the playload
+        'time': 0,
+        'SP': self.hlt_target_temp,
+        'heater': self.hlt_heater,
+        'mode': self.hlt_mode,
+        'temp': self.hlt_current_temp,
+        'unit': cbpi.get_config_parameter("unit", None)
+        }
+
+        print dynamic_hlt_data
+
+        self.cache["mqtt"].client.publish(self.dynamichlt_topic, payload=json.dumps(dynamic_hlt_data), qos=0, retain=True)
     
 
 @cbpi.initalizer(order=0)
