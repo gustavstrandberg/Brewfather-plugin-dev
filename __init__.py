@@ -64,9 +64,10 @@ class BF_MQTT_ActorInt(ActorBase):
 @cbpi.sensor
 class BF_MQTT_ListenerCommands(SensorActive):
     base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from Brewfather.")
-    base_kettle = Property.Kettle(label="Kettle to control", description="Select the Kettle you would like to control from Brewfather.")
+    base_kettle = Property.Kettle(label="Mash kettle to control", description="Select the Mash kettle you would like to control from Brewfather.")
+    base_hltkettle = Property.Kettle(label="HLT Kettle to control", description="Select the HLT kettle you would like to control from Brewfather. If none leave blank.")
     base_heater = Property.Actor(label="Mash Heater Actor", description="Select the mash heater actor whose power you would like to control from Brewfather.")
-    base_hltheater = Property.Actor(label="HLT Heater Actor", description="Select the HTL heater actor whose power you would like to control from Brewfather.") 
+    base_hltheater = Property.Actor(label="HLT Heater Actor", description="Select the HTL heater actor whose power you would like to control from Brewfather If none leave blank.") 
     last_value = None
 
     def init(self):
@@ -122,9 +123,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
                         print("Stopping step")
 
                 if "pause" in msg_in:
-                    #
-                    #nån kontoll så man inte kan pausa om redan pausat.
-                    #
+                    # testa om self.pause funkar utan global. 
                     if msg_in["pause"] == True and self.pause != True:
                         self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
                         if self.kettle_auto.json()["state"] == True:
@@ -136,7 +135,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
                         self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_kettle)
                         if self.kettle_auto.json()["state"] == False:
                             requests.post("http://localhost:5000/api/kettle/" + self.base_kettle + "/automatic")
-                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
+                        #requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
                         self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "resume"}), qos=1, retain=True)
                         self.pause = False
 
@@ -248,7 +247,7 @@ def BFMQTT_DynamicMash_background_task(self):
     'unit': cbpi.get_config_parameter("unit", None) 
     } 
         
-    self.cache["mqtt"].client.publish(self.dynamicmash_topic, payload=json.dumps(data), qos=1, retain=True)
+    self.cache["mqtt"].client.publish(self.dynamicmash_topic, payload=json.dumps(data), qos=0, retain=True)
 
 @cbpi.initalizer(order=0)
 def initBFMQTT(app):

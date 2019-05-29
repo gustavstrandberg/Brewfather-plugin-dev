@@ -2,6 +2,14 @@
 
 Brewfather MQTT Integration Plugin for CraftBeerPi 3.0
 
+Installation
+Install missing python lib
+After installation please install python MQTT lib paho
+
+pip install paho-mqtt
+
+https://pypi.python.org/pypi/paho-mqtt/1.1
+
 Configuration:
 
 1. Set the following parameters under 'System - Parameter':
