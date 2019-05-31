@@ -311,7 +311,7 @@ def BFMQTT_DynamicMash_background_task(self):
         'unit': cbpi.get_config_parameter("unit", None) 
         } 
   
-        print dynamic_mash_data
+#        print dynamic_mash_data
         self.cache["mqtt"].client.publish(self.dynamicmash_topic, payload=json.dumps(dynamic_mash_data), qos=0, retain=True)
 
     if self.HLT:
@@ -324,10 +324,105 @@ def BFMQTT_DynamicMash_background_task(self):
         'unit': cbpi.get_config_parameter("unit", None)
         }
 
-        print dynamic_hlt_data
+#        print dynamic_hlt_data
 
         self.cache["mqtt"].client.publish(self.dynamichlt_topic, payload=json.dumps(dynamic_hlt_data), qos=0, retain=True)
     
+
+@cbpi.backgroundtask(key='BFMQTT_UpdateRecipe', interval=1)
+def BFMQTT_UpdateRecipe_background_task(self):
+
+#    def init(self):
+        #self.recipe_topic = self.get_config_parameter("BF_MQTT_RECIPE_TOPIC", None)
+        self.recipe_topic = "cbpi/homebrewing/c87052414df980/recipes/update/1"
+
+        def on_message_recipe(client, userdata, msg):
+            try:
+                msg_decode=str(msg.payload.decode("utf-8","ignore"))
+                msg_in=json.loads(msg_decode)
+
+                print "================================="
+                print("BF MQTT RECPIE = ",msg_decode)
+                print "================================="
+                if "mash in temp" in msg_in:
+                    self.mashintemp = msg_in["mash in temp"]
+                    self.mash1temp = msg_in["phytase temp"]
+                    self.mash1time = msg_in["phytase time"]
+                    self.mash2temp = msg_in["glucanase temp"]
+                    self.mash2time = msg_in["glucanase time"]                        
+                    self.mash3temp = msg_in["protease temp"]
+                    self.mash3time = msg_in["protease time"]                        
+                    self.mash4temp = msg_in["B-amylase temp"]
+                    self.mash4time = msg_in["B-amylase time"]                        
+                    self.mash5temp = msg_in["A-amylase 1 temp"]
+                    self.mash5time = msg_in["A-amylase 1 time"]                        
+                    self.mash6temp = msg_in["A-amylase 2 temp"]
+                    self.mash6time = msg_in["A-amylase 2 time"]
+                    self.mashouttemp = msg_in["mash out temp"]
+                    self.mashouttime = msg_in["mash out time"]
+                    self.boiltime = msg_in["boil time"]
+                    self.hopadd = msg_in["hop additions"]
+                    self.hop1time = msg_in["hop 1 time"]
+                    self.hop2time = msg_in["hop 2 time"]
+                    self.hop3time = msg_in["hop 3 time"]
+                    self.hop4time = msg_in["hop 4 time"]
+                    self.hop5time = msg_in["hop 5 time"]
+
+                #requests.delete("http://localhost:5000/api/step/")
+                #requests.put("http://localhost:5000/api/config/brew_name", data=json.dumps({"name": "brew_name", "value": "Brewfather Recipe"}), headers = {"Content-Type" : "application/json"} )
+                #recipe_data = {"name":"step1","type":"MashInStep","config":{"kettle":"1","temp":"26"}} 
+                #requests.post("http://localhost:5000/api/step/", data=json.dumps(recipe_data), headers = {"Content-Type" : "application/json"} )
+                #requests.get("http://localhost:5000/ui/")
+                #requests.get("http://localhost:5000/api/system/dump")
+
+                recipe_data = {"name" : "Brewfather Recipe", 
+                    "steps" : [  
+                        {"name" : "Mash In", "type" : "MASH", "timer" : 1 ,"temp" : self.mashintemp}, 
+                        {"name" : "Mash Step 1", "type" : "MASH", "timer" : self.mash1time ,"temp" : self.mash1temp}, 
+                        {"name" : "Mash Step 2", "type" : "MASH", "timer" : self.mash2time ,"temp" : self.mash2temp}, 
+                        {"name" : "Mash Step 3", "type" : "MASH", "timer" : self.mash3time ,"temp" : self.mash3temp}, 
+                        {"name" : "Mash Step 4", "type" : "MASH", "timer" : self.mash4time ,"temp" : self.mash4temp}, 
+                        {"name" : "Mash Step 5", "type" : "MASH", "timer" : self.mash5time ,"temp" : self.mash5temp}, 
+                        {"name" : "Mash Step 6", "type" : "MASH", "timer" : self.mash6time ,"temp" : self.mash6temp},
+                        {"name" : "Mash Out", "type" : "MASH", "timer" : self.mashouttime ,"temp" : self.mashouttemp}, 
+                        {"name" : "Boil Step", "type" : "BOIL", "timer" : self.boiltime ,"temp" : 100}
+                    ]
+                }
+                
+                #recipe_hop_data = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1": self.hop1time, "hop_2": self.hop2time, "hop_3": self.hop3time,"hop_4": self.hop4time, "hop_5": self.hop5time},"id":9}
+            #    recipe_hop_data = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":None,"id":9,"name":"Boil Step","order":None,"start":None,"state":"I","stepstate":None,"type":"BoilStep"}
+                
+             #   print "HOP: ", recipe_hop_data
+#{"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":null,"id":9,"name":"Boil Step","order":8,"start":null,"state":null,"stepstate":null,"type":"BoilStep"}
+               # if brewing do not imort recipe, otherwise it will hang. 
+                time.sleep(.1)
+                requests.post("http://localhost:5000/api/recipe/import/v1/", data=json.dumps(recipe_data), headers = {'Content-Type':'application/json'} )
+                time.sleep(.1) 
+                requests.post("http://localhost:5000/api/step/reset")
+
+                #requests.post("http://localhost:5000/api/step/9", data=recipe_hop_data, headers = {'Content-Type':'application/json'} )
+
+                #recipe_data_boil = {"name":"Boil Step 2","type":"BoilStep","config":{"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5","kettle":"1","temp":100,"timer":60}}
+                #requests.post("http://localhost:5000/api/step/", data=json.dumps(recipe_data_boil), headers = {"Content-Type" : "application/json"} )
+
+               # recipe_data_boil = {"config":{"kettle":"1","hop_1":"10","hop_2":"20","hop_3":"30","hop_4":"40","hop_5":"50"},"id":9}
+                #recipe_data_boil = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"id":9,"name":"Boil Step","type":"BoilStep"}
+                #requests.put("http://localhost:5000/api/step/10", data=recipe_data_boil, headers={"Content-Type" : "application/json"} )
+               # requests.post("http://localhost:5000/api/step/sort")
+# http://localhost:5000/api/step/9
+# {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":null,"id":9,"name":"Boil Step","order":8,"start":null,"state":null,"stepstate":null,"type":"BoilStep"}
+
+            except Exception as e:
+                print e
+
+        self.cache["mqtt"].client.subscribe(self.recipe_topic)
+        self.cache["mqtt"].client.message_callback_add(self.recipe_topic, on_message_recipe)
+    
+  #      def stop(self):
+  #      self.api.cache["mqtt"].client.unsubscribe(self.recipe_topic)
+    
+#    def execute(self):
+#        self.sleep(5)
 
 @cbpi.initalizer(order=0)
 def initBFMQTT(app):
