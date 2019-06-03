@@ -333,8 +333,8 @@ def BFMQTT_DynamicMash_background_task(self):
 def BFMQTT_UpdateRecipe_background_task(self):
 
 #    def init(self):
-        #self.recipe_topic = self.get_config_parameter("BF_MQTT_RECIPE_TOPIC", None)
-        self.recipe_topic = "cbpi/homebrewing/c87052414df980/recipes/update/1"
+        self.recipes_topic = self.get_config_parameter("BF_MQTT_RECIPES_TOPIC", None)
+        #self.recipe_topic = "cbpi/homebrewing/c87052414df980/recipes/update/1"
 
         def on_message_recipe(client, userdata, msg):
             try:
@@ -415,11 +415,11 @@ def BFMQTT_UpdateRecipe_background_task(self):
             except Exception as e:
                 print e
 
-        self.cache["mqtt"].client.subscribe(self.recipe_topic)
-        self.cache["mqtt"].client.message_callback_add(self.recipe_topic, on_message_recipe)
+        self.cache["mqtt"].client.subscribe(self.recipes_topic)
+        self.cache["mqtt"].client.message_callback_add(self.recipes_topic, on_message_recipe)
     
   #      def stop(self):
-  #      self.api.cache["mqtt"].client.unsubscribe(self.recipe_topic)
+  #      self.api.cache["mqtt"].client.unsubscribe(self.recipes_topic)
     
 #    def execute(self):
 #        self.sleep(5)
@@ -476,6 +476,11 @@ def initBFMQTT(app):
     if dynamichlt_topic is None:
         dynamichlt_topic = "cbpi/homebrewing/" + deviceid + "/dynamic/HLT"
         cbpi.add_config_parameter("BF_MQTT_DYNAMICHLT_TOPIC", "cbpi/homebrewing/" + deviceid + "/dynamic/HLT", "text", "Brewfather MQTT Dynamic HLT Topic")
+
+    recipes_topic = app.get_config_parameter("BF_MQTT_RECIPES_TOPIC", None)
+    if recipes_topic is None:
+        recipes_topic = "cbpi/homebrewing/" + deviceid + "/recipes/update/1"
+        cbpi.add_config_parameter("BF_MQTT_RECIPES_TOPIC", "cbpi/homebrewing/" + deviceid + "/recipes/update/1", "text", "Brewfather MQTT Recipes Topic")
 
     app.cache["mqtt"] = BF_MQTT_Thread(server,port,username, password, tls, deviceid)
     app.cache["mqtt"].daemon = True
