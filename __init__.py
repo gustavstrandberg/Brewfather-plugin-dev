@@ -246,6 +246,8 @@ def BFMQTT_DynamicMash_background_task(self):
     self.events_topic = cbpi.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
     self.dynamicmash_topic = cbpi.get_config_parameter("BF_MQTT_DYNAMICMASH_TOPIC", None)
     self.dynamichlt_topic = cbpi.get_config_parameter("BF_MQTT_DYNAMICHLT_TOPIC", None)
+    self.mash = None
+    self.HLT = None
     #step = cbpi.cache.get("active_step")
     #kettle = cbpi.cache.get("kettle")
     
