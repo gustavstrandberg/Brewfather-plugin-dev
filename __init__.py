@@ -196,42 +196,12 @@ class BF_MQTT_ListenerCommands(SensorActive):
         self.api.cache["mqtt"].client.subscribe(self.commands_topic)
         self.api.cache["mqtt"].client.message_callback_add(self.commands_topic, on_message)
 
-
-#    def get_value(self):
-#        # Control base actor from MQTT.
-#        print "=== get_value ==="
-#        print "self.last_value = "
-#        print self.last_value 
-#        print "msg_in ="
-#        #print msg_in
-        
-#        if (self.last_value == "off") :
-#                self.api.switch_actor_off(int(self.base_pump))
-#                print "Pump2 OFF"
-#        elif (self.last_value == "on") :
-#                self.api.switch_actor_on(int(self.base_pump))
-#                print "Pump2 ON"
-#        return {"value": self.last_value}
-
- #   def get_unit(self):
- #       return self.unit
-
     def stop(self):
         self.api.cache["mqtt"].client.unsubscribe(self.commands_topic)
         SensorActive.stop(self)
 
     def execute(self):
         self.pause = False
-        '''
-        Active sensor has to handle his own loop
-        :return:
-        '''
-    
-#        global base_mash_kettle_id
-#        global base_hlt_kettle_id
-#        base_mash_kettle_id = self.base_kettle
-#        base_hlt_kettle_id = self.base_hltkettle
-
         self.sleep(5)
 
 @cbpi.backgroundtask(key='BFMQTT_DynamicMash', interval=1)                     # create bg job with an interval of 2.5 seconds 
