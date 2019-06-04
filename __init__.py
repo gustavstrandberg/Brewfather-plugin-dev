@@ -11,12 +11,18 @@ from modules import cbpi, app, ActorBase
 
 #gs
 from modules.core.hardware import SensorActive, ActorBase
-from modules.core.props import Property
+#from modules.core.props import Property
 from modules.steps import StepView
 from modules.kettle import Kettle2View
+
+from modules.core.props import Property, StepProperty
+from modules.core.step import StepBase
+
+from modules import cbpi
 import json
 import os, re, threading, time
 import requests
+import pdb
 
 q = Queue()
 mashkettle_id = None
@@ -92,6 +98,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
         global pump_id
         global mashheater_id
         global hltheater_id
+        global mashkettle_auto_status
         mashkettle_id = self.base_mashkettle
         hltkettle_id = self.base_hltkettle 
         pump_id = self.base_pump
@@ -111,83 +118,115 @@ class BF_MQTT_ListenerCommands(SensorActive):
 
                 if "pump" in msg_in:
                     if msg_in["pump"] == "on":
-                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
-                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pump on"}), qos=1, retain=True)
-                        #if event_auto / event_manual chtopic 
-                        print("Starting Pump")
-                        #self.api.switch_actor_on(2)
+                        #cbpi.switch_actor_on(int(self.base_pump))                                                  # needs refresh of web, why?
+                        #self.power = 100
+                        #actor_on(int(self.base_pump), int(self.power))
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on", timeout = 1)
+                        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                        if mashkettle.state == False:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "pump on"}), qos=1, retain=True)
+                        else:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "pump on"}), qos=1, retain=True)
                     if msg_in["pump"] == "off":
-                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
-                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pump auto"}), qos=1, retain=True)
-                        print("Stopping Pump")
-                        #self.api.switch_actor_off(2)
-
+                        #self.api.switch_actor_off(int(self.base_pump))                                             # needs refresh of web, why?
+                        #self.actor_off(int(self.actor))
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off", timeout = 1)
+                        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                        if mashkettle.state == False:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "pump auto"}), qos=1, retain=True)
+                        else:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "pump auto"}), qos=1, retain=True)
+                
                 if "start" in msg_in:
                     if msg_in["start"] == "auto":
-                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_mashkettle)
-                        if self.kettle_auto.json()["state"] == False:
-                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic") 
-                        print("Set kettle to automatic start") 
-                
+                        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                        if mashkettle.state == False:
+                            print "om auto = false, posta auto" 
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic", timeout = 1) 
+                            print "postat start"
+
+#                pdb.set_trace()
+
                 if "recipe" in msg_in:
-                    if msg_in["recipe"] == 1:
-                        requests.post("http://localhost:5000/api/step/start")
-                        requests.post("http://localhost:5000/api/step/action/start")
-                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"time":0, "event": "recipe 1"}), qos=1, retain=True)
-                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"time":0, "event": "start"}), qos=1, retain=True) 
-                        print("Step start")
+                    if msg_in["recipe"] == '1':
+                        print "1 in recipe"
+                        requests.post("http://localhost:5000/api/step/start", timeout = 1)
+                        print "postat step/start"
+                        requests.post("http://localhost:5000/api/step/action/start", timeout = 1)
+                        print "postat action/start"
+                        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                        if mashkettle.state == False:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"time":0, "event": "recipe 1"}), qos=1, retain=True)
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"time":0, "event": "start"}), qos=1, retain=True) 
+                        else:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"time":0, "event": "recipe 1"}), qos=1, retain=True)
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"time":0, "event": "start"}), qos=1, retain=True)
 
                 if "stop" in msg_in:
                     if msg_in["stop"] == True:
-                        requests.post("http://localhost:5000/api/step/reset")
-                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_mashkettle)
-                        if self.kettle_auto.json()["state"] == True:
-                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic")
-                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
-                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "stop"}), qos=1, retain=True)
-                        print("Stopping step")
+                        print "stop = True, posta step reset"
+                        requests.post("http://localhost:5000/api/step/reset", timeout = 1)
+                        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                        if mashkettle.state == True:
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic", timeout = 1)
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off", timeout = 1)
+                        if mashkettle.state == False: 
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "stop"}), qos=1, retain=True)
+                        else:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "stop"}), qos=1, retain=True)
 
                 if "pause" in msg_in:
                     # testa om self.pause funkar utan global. 
                     if msg_in["pause"] == True and self.pause != True:
-                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_mashkettle)
-                        if self.kettle_auto.json()["state"] == True:
-                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic")
-                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off")
-                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "pause"}), qos=1, retain=True)
+                        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                        if mashkettle.state == True:
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic", timeout = 1)
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "pause"}), qos=1, retain=True)
+                        else:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "pause"}), qos=1, retain=True)
+                        requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/off", timeout = 1)
                         self.pause = True 
+                    
                     if msg_in["pause"] == False and self.pause == True:
-                        self.kettle_auto = requests.get("http://localhost:5000/api/kettle/" + self.base_mashkettle)
-                        if self.kettle_auto.json()["state"] == False:
-                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic")
-                        #requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on")
-                        self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "resume"}), qos=1, retain=True)
+                        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                        if mashkettle.state == False:
+                            requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic", timeout = 1)
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "resume"}), qos=1, retain=True)
+                        else:
+                            self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "resume"}), qos=1, retain=True)
+                        #requests.post("http://localhost:5000/api/actor/" + self.base_pump + "/switch/on", timeout = 1)
                         self.pause = False
 
                 if "mash SP" in msg_in:
                     self.settemp = str(msg_in["mash SP"])
-                    requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/targettemp/"  + self.settemp)
-                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "Set Target Temp = " + self.settemp}), qos=1, retain=True)
+                    requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/targettemp/"  + self.settemp, timeout = 1)
+                    mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                    if mashkettle.state == False:
+                        self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "Set Target Temp = " + self.settemp}), qos=1, retain=True)
+                    else:
+                        self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "Set Target Temp = " + self.settemp}), qos=1, retain=True)
 
                 if "PWM" in msg_in:
                     self.pwm = str(msg_in["PWM"])
-                    requests.post("http://localhost:5000/api/actor/"  + self.base_mashheater + "/power/" + self.pwm)
-                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "Set Power = " + self.pwm}), qos=1, retain=True)
+                    requests.post("http://localhost:5000/api/actor/"  + self.base_mashheater + "/power/" + self.pwm, timeout = 1)
+                    mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
+                    if mashkettle.state == False:
+                        self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "Set Power = " + self.pwm}), qos=1, retain=True)
+                    else:
+                        self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "Set Power = " + self.pwm}), qos=1, retain=True)
+                    #self.actor_power(int(self.actor), self.power)
+
 
                 if "HLT SP" in msg_in:
                     self.hltsp = str(msg_in["HLT SP"])
-                    requests.post("http://localhost:5000/api/actor/"  + self.base_hltheater + "/power/" + self.hltsp)
-                    self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
+                    requests.post("http://localhost:5000/api/actor/"  + self.base_hltheater + "/power/" + self.hltsp, timeout = 1)
+                    hltkettle = cbpi.cache.get("kettle")[int(self.base_hltkettle)]
+                    if hltkettle.state == False:
+                        self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
+                    else:
+                        self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
 
   #             if "countdown" in msg_in:
-  #                 requests.post("http://localhost:5000/api/actor/"  + self.base_heater + "/power/" + msg_in["PWM"] )
-  #                 self.api.cache["mqtt"].client.publish(self.events_topic, payload=json.dumps({"event": "_PWM_"}), qos=1, retain=True)
-
-                #elif "stop" in msg_in:
-                #    if msg_in["stop]" == "auto":
-                #        print("St Brew, start = ",msg_in["start"])
-                #    if msg_in["stop"] == "true":
-                #        print("Stopping Brew, start = ",msg_in["start"])
 
             except Exception as e:
                 print e
@@ -212,7 +251,7 @@ def BFMQTT_DynamicMash_background_task(self):
     global pump_id
     global mashheater_id
     global hltheater_id
-  
+
     self.events_topic = cbpi.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
     self.dynamicmash_topic = cbpi.get_config_parameter("BF_MQTT_DYNAMICMASH_TOPIC", None)
     self.dynamichlt_topic = cbpi.get_config_parameter("BF_MQTT_DYNAMICHLT_TOPIC", None)
