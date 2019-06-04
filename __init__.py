@@ -150,7 +150,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
 #                pdb.set_trace()
 
                 if "recipe" in msg_in:
-                    if msg_in["recipe"] == '1':
+                    if msg_in["recipe"] == 1:
                         print "1 in recipe"
                         requests.post("http://localhost:5000/api/step/start", timeout = 1)
                         self.sleep(.1)
@@ -167,7 +167,6 @@ class BF_MQTT_ListenerCommands(SensorActive):
 
                 if "stop" in msg_in:
                     if msg_in["stop"] == True:
-                        print "stop = True, posta step reset"
                         requests.post("http://localhost:5000/api/step/reset", timeout = 1)
                         self.sleep(.1)
                         mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
