@@ -86,7 +86,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
     base_hltkettle = Property.Kettle(label="HLT Kettle to control", description="Select the HLT kettle you would like to control from Brewfather. If none leave blank.")
     base_mashheater = Property.Actor(label="Mash Heater Actor", description="Select the mash heater actor whose power you would like to control from Brewfather.")
     base_hltheater = Property.Actor(label="HLT Heater Actor", description="Select the HTL heater actor whose power you would like to control from Brewfather If none leave blank.") 
-    last_value = None
+#    last_value = None
 
     def init(self):
         self.commands_topic = self.get_config_parameter("BF_MQTT_COMMANDS_TOPIC", None) 
@@ -226,11 +226,11 @@ class BF_MQTT_ListenerCommands(SensorActive):
                         self.api.cache["mqtt"].client.publish(self.events_topic + "/auto", payload=json.dumps({"event": "Set Power = " + self.pwm}), qos=1, retain=True)
                     #self.actor_power(int(self.actor), self.power)
 
-
-                if "HLT SP" in msg_in:
+                if "HLT SP" in msg_in:          # SP = set temp eller set power?
                     self.hltsp = str(msg_in["HLT SP"])
                     requests.post("http://localhost:5000/api/actor/"  + self.base_hltheater + "/power/" + self.hltsp, timeout = 1)
-                    self.sleep(.1) 
+                    self.sleep(.1)
+                    print "fixa event"
                     hltkettle = cbpi.cache.get("kettle")[int(self.base_hltkettle)]
                     if hltkettle.state == False:
                         self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
