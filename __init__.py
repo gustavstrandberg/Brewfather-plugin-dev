@@ -18,7 +18,7 @@ from modules.kettle import Kettle2View
 from modules.core.props import Property, StepProperty
 from modules.core.step import StepBase
 
-from modules import cbpi
+#from modules import cbpi
 import json
 import os, re, threading, time
 import requests
@@ -30,6 +30,10 @@ hltkettle_id = None
 pump_id = None
 mashheater_id = None
 hltheater_id = None
+#ferm1heater_id = None
+#ferm1cooler_id = None
+#ferm2heater_id = None
+#ferm2cooler_id = None
 
 def on_connect(client, userdata, flags, rc):
     print("BF MQTT Connected" + str(rc))
@@ -59,24 +63,24 @@ class BF_MQTT_Thread (threading.Thread):
         self.client.connect(str(self.server), int(self.port), 60)
         self.client.loop_forever()
 
-@cbpi.actor
-class BF_MQTT_ControlObject(ActorBase):
-    topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/uuid/commands", description="MQTT TOPIC")
-    object = Property.Text("Object", configurable=True, default_value="", description="Data Object, e.g. pump")
-    def on(self, power=100):
-        self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({self.object: "on"}), qos=2, retain=True)
-
-    def off(self):
-        self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({self.object: "off"}), qos=2, retain=True)
-
-@cbpi.actor
-class BF_MQTT_ActorInt(ActorBase):
-    topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
-    def on(self, power=100):
-        self.api.cache["mqtt"].client.publish(self.topic, payload=1, qos=2, retain=True)
-
-    def off(self):
-        self.api.cache["mqtt"].client.publish(self.topic, payload=0, qos=2, retain=True)
+#@cbpi.actor
+#class BF_MQTT_ControlObject(ActorBase):
+#    topic = Property.Text("Topic", configurable=True, default_value="cbpi/homebrewing/uuid/commands", description="MQTT TOPIC")
+#    object = Property.Text("Object", configurable=True, default_value="", description="Data Object, e.g. pump")
+#    def on(self, power=100):
+#        self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({self.object: "on"}), qos=2, retain=True)
+#
+#    def off(self):
+#        self.api.cache["mqtt"].client.publish(self.topic, payload=json.dumps({self.object: "off"}), qos=2, retain=True)
+#
+#@cbpi.actor
+#class BF_MQTT_ActorInt(ActorBase):
+#    topic = Property.Text("Topic", configurable=True, default_value="", description="MQTT TOPIC")
+#    def on(self, power=100):
+#        self.api.cache["mqtt"].client.publish(self.topic, payload=1, qos=2, retain=True)
+#
+#    def off(self):
+#        self.api.cache["mqtt"].client.publish(self.topic, payload=0, qos=2, retain=True)
 
 @cbpi.sensor
 class BF_MQTT_ListenerCommands(SensorActive):
@@ -86,10 +90,12 @@ class BF_MQTT_ListenerCommands(SensorActive):
     base_hltkettle = Property.Kettle(label="HLT Kettle to control", description="Select the HLT kettle you would like to control from Brewfather. If none leave blank.")
     base_mashheater = Property.Actor(label="Mash Heater Actor", description="Select the mash heater actor whose power you would like to control from Brewfather.")
     base_hltheater = Property.Actor(label="HLT Heater Actor", description="Select the HTL heater actor whose power you would like to control from Brewfather If none leave blank.") 
-#    last_value = None
+#    base_ferm1 = Property.Kettle(label="Fermenter1 to control", description="Select Fermenter Channel 1 you would like to control from Brewfather.")
+#    base_ferm2 = Property.Kettle(label="Fermenter2 to control", description="Select Fermenter Channel 2 you would like to control from Brewfather.")
 
     def init(self):
-        self.commands_topic = self.get_config_parameter("BF_MQTT_COMMANDS_TOPIC", None) 
+        self.homebrewing_commands_topic = self.get_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", None) 
+        self.thermostat_commands_topic = "cbpi/thermostat/c87052414df980/commands"
         self.events_topic = self.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
         SensorActive.init(self)
        
@@ -106,14 +112,14 @@ class BF_MQTT_ListenerCommands(SensorActive):
         hltheater_id = self.base_hltheater
 
 
-        def on_message(client, userdata, msg):
+        def on_message_homebrewing(client, userdata, msg):
 
             try:
                 msg_decode=str(msg.payload.decode("utf-8","ignore"))
                 msg_in=json.loads(msg_decode)
 
                 print "=================================" 
-                print("BF MQTT Data Received",msg_decode)
+                print("BF MQTT Homebrewing Data Received",msg_decode)
                 print "=================================" 
 
                 if "pump" in msg_in:
@@ -142,21 +148,17 @@ class BF_MQTT_ListenerCommands(SensorActive):
                     if msg_in["start"] == "auto":
                         mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
                         if mashkettle.state == False:
-                            print "om auto = false, posta auto" 
                             requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic", timeout = 1) 
                             self.sleep(.1) 
-                            print "postat start"
 
 #                pdb.set_trace()
 
                 if "recipe" in msg_in:
                     if msg_in["recipe"] == 1:
-                        print "1 in recipe"
                         requests.post("http://localhost:5000/api/step/start", timeout = 1)
                         self.sleep(.1)
                         requests.post("http://localhost:5000/api/step/action/start", timeout = 1)
                         self.sleep(.1) 
-                        print "postat action/start"
                         mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
                         if mashkettle.state == False:
                             self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"time":0, "event": "recipe 1"}), qos=1, retain=True)
@@ -230,7 +232,6 @@ class BF_MQTT_ListenerCommands(SensorActive):
                     self.hltsp = str(msg_in["HLT SP"])
                     requests.post("http://localhost:5000/api/actor/"  + self.base_hltheater + "/power/" + self.hltsp, timeout = 1)
                     self.sleep(.1)
-                    print "fixa event"
                     hltkettle = cbpi.cache.get("kettle")[int(self.base_hltkettle)]
                     if hltkettle.state == False:
                         self.api.cache["mqtt"].client.publish(self.events_topic + "/manual", payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
@@ -242,18 +243,34 @@ class BF_MQTT_ListenerCommands(SensorActive):
             except Exception as e:
                 print e
         
-        self.api.cache["mqtt"].client.subscribe(self.commands_topic)
-        self.api.cache["mqtt"].client.message_callback_add(self.commands_topic, on_message)
+        def on_message_thermostat(client, userdata, msg):
+            try:
+                msg_decode=str(msg.payload.decode("utf-8","ignore"))
+                msg_in=json.loads(msg_decode)
+                print "================================="
+                print("BF MQTT Thermostat Data Received",msg_decode)
+                print "================================="
+                print "**** STOP in Thermostat"
+            except Exception as e:
+                print e
+
+
+        self.api.cache["mqtt"].client.subscribe(self.homebrewing_commands_topic)
+        self.api.cache["mqtt"].client.message_callback_add(self.homebrewing_commands_topic, on_message_homebrewing)
+        
+        self.api.cache["mqtt"].client.subscribe(self.thermostat_commands_topic)
+        self.api.cache["mqtt"].client.message_callback_add(self.thermostat_commands_topic,on_message_thermostat)
 
     def stop(self):
-        self.api.cache["mqtt"].client.unsubscribe(self.commands_topic)
+        self.api.cache["mqtt"].client.unsubscribe(self.homebrewing_commands_topic)
+        self.api.cache["mqtt"].client.unsubscribe(self.thermostat_commands_topic) 
         SensorActive.stop(self)
 
     def execute(self):
-        self.pause = False
+#        self.pause = False
         self.sleep(5)
 
-@cbpi.backgroundtask(key='BFMQTT_DynamicMash', interval=1)                     # create bg job with an interval of 2.5 seconds 
+@cbpi.backgroundtask(key='BFMQTT_DynamicMash', interval=1)                      
 def BFMQTT_DynamicMash_background_task(self):
 
     global mashkettle_id
@@ -477,10 +494,10 @@ def initBFMQTT(app):
         deviceid = "*** Enter Device Id ***"
         cbpi.add_config_parameter("BF_MQTT_DEVICEID", "*** Enter Device ID ***", "text", "Brewfather MQTT DeviceID")
 
-    commands_topic = app.get_config_parameter("BF_MQTT_COMMANDS_TOPIC", None)
-    if commands_topic is None:
-        commands_topic = "cbpi/homebrewing/" + deviceid + "/commands"
-        cbpi.add_config_parameter("BF_MQTT_COMMANDS_TOPIC", "cbpi/homebrewing/" + deviceid + "/commands", "text", "Brewfather MQTT Commands Topic")
+    homebrewing_commands_topic = app.get_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", None)
+    if homebrewing_commands_topic is None:
+        homebrewing_commands_topic = "cbpi/homebrewing/" + deviceid + "/commands"
+        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", "cbpi/homebrewing/" + deviceid + "/commands", "text", "Brewfather MQTT Homebrewing Commands Topic")
 
     events_topic = app.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
     if events_topic is None:
@@ -510,8 +527,6 @@ def initBFMQTT(app):
         while True:
             try:
                 m = q.get(timeout=0.1)
-                #api.cache.get("sensors")[m.get("id")].instance.last_value = m.get("value")
-                #api.receive_sensor_value(m.get("id"), m.get("value"))
             except:
                 pass
 
