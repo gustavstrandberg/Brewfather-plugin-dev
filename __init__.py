@@ -95,7 +95,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
 
     def init(self):
         self.homebrewing_commands_topic = self.get_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", None) 
-        self.thermostat_commands_topic = "cbpi/thermostat/c87052414df980/commands"
+        self.thermostat_commands_topic = self.get_config_parameter("BF_MQTT_THERMOSTAT_COMMANDS_TOPIC", None) 
         self.events_topic = self.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
         SensorActive.init(self)
        
@@ -499,6 +499,11 @@ def initBFMQTT(app):
         homebrewing_commands_topic = "cbpi/homebrewing/" + deviceid + "/commands"
         cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", "cbpi/homebrewing/" + deviceid + "/commands", "text", "Brewfather MQTT Homebrewing Commands Topic")
 
+    thermostat_commands_topic = app.get_config_parameter("BF_MQTT_THERMOSTAT_COMMANDS_TOPIC", None)
+    if thermostat_commands_topic is None:
+        thermostat_commands_topic = "cbpi/thermostat/" + deviceid + "/commands"
+        cbpi.add_config_parameter("BF_MQTT_THERMOSTAT_COMMANDS_TOPIC", "cbpi/thermostat/" + deviceid + "/commands", "text", "Brewfather MQTT Thermostat Commands Topic")
+        
     events_topic = app.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
     if events_topic is None:
         events_topic = "cbpi/homebrewing/" + deviceid + "/events"
