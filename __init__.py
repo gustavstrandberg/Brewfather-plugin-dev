@@ -97,6 +97,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
         self.homebrewing_commands_topic = self.get_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", None) 
         self.thermostat_commands_topic = self.get_config_parameter("BF_MQTT_THERMOSTAT_COMMANDS_TOPIC", None) 
         self.events_topic = self.get_config_parameter("BF_MQTT_EVENTS_TOPIC", None)
+        self.recipes_topic = self.get_config_parameter("BF_MQTT_RECIPES_TOPIC", None)
 
         SensorActive.init(self)
        
@@ -273,7 +274,59 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 print "**** STOP in Thermostat"
             except Exception as e:
                 print e
+        
+        def on_message_recipe(client, userdata, msg):
+            try:
+                msg_decode=str(msg.payload.decode("utf-8","ignore"))
+                msg_in=json.loads(msg_decode)
+                print "================================="
+                print("BF MQTT RECPIE = ",msg_decode)
+                print "================================="
+                if "mash in temp" in msg_in:
+                    self.mashintemp = msg_in["mash in temp"]
+                    self.mash1temp = msg_in["phytase temp"]
+                    self.mash1time = msg_in["phytase time"]
+                    self.mash2temp = msg_in["glucanase temp"]
+                    self.mash2time = msg_in["glucanase time"]
+                    self.mash3temp = msg_in["protease temp"]
+                    self.mash3time = msg_in["protease time"]
+                    self.mash4temp = msg_in["B-amylase temp"]
+                    self.mash4time = msg_in["B-amylase time"]
+                    self.mash5temp = msg_in["A-amylase 1 temp"]
+                    self.mash5time = msg_in["A-amylase 1 time"]
+                    self.mash6temp = msg_in["A-amylase 2 temp"]
+                    self.mash6time = msg_in["A-amylase 2 time"]
+                    self.mashouttemp = msg_in["mash out temp"]
+                    self.mashouttime = msg_in["mash out time"]
+                    self.boiltime = msg_in["boil time"]
+                    self.hopadd = msg_in["hop additions"]
+                    self.hop1time = msg_in["hop 1 time"]
+                    self.hop2time = msg_in["hop 2 time"]
+                    self.hop3time = msg_in["hop 3 time"]
+                    self.hop4time = msg_in["hop 4 time"]
+                    self.hop5time = msg_in["hop 5 time"]
+                
+                recipe_data = {"name" : "Brewfather Recipe",
+                    "steps" : [
+                        {"name" : "Mash In", "type" : "MASH", "timer" : 1 ,"temp" : self.mashintemp},
+                        {"name" : "Mash Step 1", "type" : "MASH", "timer" : self.mash1time ,"temp" : self.mash1temp},
+                        {"name" : "Mash Step 2", "type" : "MASH", "timer" : self.mash2time ,"temp" : self.mash2temp},
+                        {"name" : "Mash Step 3", "type" : "MASH", "timer" : self.mash3time ,"temp" : self.mash3temp},
+                        {"name" : "Mash Step 4", "type" : "MASH", "timer" : self.mash4time ,"temp" : self.mash4temp},
+                        {"name" : "Mash Step 5", "type" : "MASH", "timer" : self.mash5time ,"temp" : self.mash5temp},
+                        {"name" : "Mash Step 6", "type" : "MASH", "timer" : self.mash6time ,"temp" : self.mash6temp},
+                        {"name" : "Mash Out", "type" : "MASH", "timer" : self.mashouttime ,"temp" : self.mashouttemp},
+                        {"name" : "Boil Step", "type" : "BOIL", "timer" : self.boiltime ,"temp" : 100}
+                    ]
+                }
+                
+                requests.post("http://localhost:5000/api/recipe/import/v1/", data=json.dumps(recipe_data), headers = {'Content-Type':'application/json'}, timeout = 1 )
+                #time.sleep(.1)
+                requests.post("http://localhost:5000/api/step/reset", timeout = 1)
+                #time.sleep(.5)
 
+            except Exception as e:
+                print e
 
         self.api.cache["mqtt"].client.subscribe(self.homebrewing_commands_topic)
         self.api.cache["mqtt"].client.message_callback_add(self.homebrewing_commands_topic, on_message_homebrewing)
@@ -281,9 +334,20 @@ class BF_MQTT_ListenerCommands(SensorActive):
         self.api.cache["mqtt"].client.subscribe(self.thermostat_commands_topic)
         self.api.cache["mqtt"].client.message_callback_add(self.thermostat_commands_topic,on_message_thermostat)
 
+        self.api.cache["mqtt"].client.subscribe(self.recipes_topic)
+        self.api.cache["mqtt"].client.message_callback_add(self.recipes_topic, on_message_recipe)
+        
+#        self.api.cache["mqtt"].client.subscribe(self.profiles1_topic)
+#        self.api.cache["mqtt"].client.message_callback_add(self.profiles1_topic, on_message_profiles1)
+#        self.api.cache["mqtt"].client.subscribe(self.profiles2_topic)
+#        self.api.cache["mqtt"].client.message_callback_add(self.profiles2_topic, on_message_profiles2)
+
     def stop(self):
         self.api.cache["mqtt"].client.unsubscribe(self.homebrewing_commands_topic)
         self.api.cache["mqtt"].client.unsubscribe(self.thermostat_commands_topic) 
+        self.api.cache["mqtt"].client.unsubscribe(self.recipes_topic)
+#        self.api.cache["mqtt"].client.unsubscribe(self.profiles1_topic)
+#        self.api.cache["mqtt"].client.unsubscribe(self.profiles2_topic)
         SensorActive.stop(self)
 
     def execute(self):
@@ -383,42 +447,42 @@ def BFMQTT_DynamicMash_background_task(self):
         self.cache["mqtt"].client.publish(self.dynamichlt_topic, payload=json.dumps(dynamic_hlt_data), qos=0, retain=True)
     
 
-@cbpi.backgroundtask(key='BFMQTT_UpdateRecipe', interval=2)
-def BFMQTT_UpdateRecipe_background_task(self):
+#@cbpi.backgroundtask(key='BFMQTT_UpdateRecipe', interval=2)
+#def BFMQTT_UpdateRecipe_background_task(self):
 
-        self.recipes_topic = self.get_config_parameter("BF_MQTT_RECIPES_TOPIC", None)
+#       self.recipes_topic = self.get_config_parameter("BF_MQTT_RECIPES_TOPIC", None)
 
-        def on_message_recipe(client, userdata, msg):
-            try:
-                msg_decode=str(msg.payload.decode("utf-8","ignore"))
-                msg_in=json.loads(msg_decode)
+#        def on_message_recipe(client, userdata, msg):
+#            try:
+#                msg_decode=str(msg.payload.decode("utf-8","ignore"))
+#                msg_in=json.loads(msg_decode)
 
-                print "================================="
-                print("BF MQTT RECPIE = ",msg_decode)
-                print "================================="
-                if "mash in temp" in msg_in:
-                    self.mashintemp = msg_in["mash in temp"]
-                    self.mash1temp = msg_in["phytase temp"]
-                    self.mash1time = msg_in["phytase time"]
-                    self.mash2temp = msg_in["glucanase temp"]
-                    self.mash2time = msg_in["glucanase time"]                        
-                    self.mash3temp = msg_in["protease temp"]
-                    self.mash3time = msg_in["protease time"]                        
-                    self.mash4temp = msg_in["B-amylase temp"]
-                    self.mash4time = msg_in["B-amylase time"]                        
-                    self.mash5temp = msg_in["A-amylase 1 temp"]
-                    self.mash5time = msg_in["A-amylase 1 time"]                        
-                    self.mash6temp = msg_in["A-amylase 2 temp"]
-                    self.mash6time = msg_in["A-amylase 2 time"]
-                    self.mashouttemp = msg_in["mash out temp"]
-                    self.mashouttime = msg_in["mash out time"]
-                    self.boiltime = msg_in["boil time"]
-                    self.hopadd = msg_in["hop additions"]
-                    self.hop1time = msg_in["hop 1 time"]
-                    self.hop2time = msg_in["hop 2 time"]
-                    self.hop3time = msg_in["hop 3 time"]
-                    self.hop4time = msg_in["hop 4 time"]
-                    self.hop5time = msg_in["hop 5 time"]
+#                print "================================="
+#                print("BF MQTT RECPIE = ",msg_decode)
+#                print "================================="
+#                if "mash in temp" in msg_in:
+#                    self.mashintemp = msg_in["mash in temp"]
+#                    self.mash1temp = msg_in["phytase temp"]
+#                    self.mash1time = msg_in["phytase time"]
+#                    self.mash2temp = msg_in["glucanase temp"]
+#                    self.mash2time = msg_in["glucanase time"]                        
+#                    self.mash3temp = msg_in["protease temp"]
+#                    self.mash3time = msg_in["protease time"]                        
+#                    self.mash4temp = msg_in["B-amylase temp"]
+#                    self.mash4time = msg_in["B-amylase time"]                        
+#                    self.mash5temp = msg_in["A-amylase 1 temp"]
+#                    self.mash5time = msg_in["A-amylase 1 time"]                        
+#                    self.mash6temp = msg_in["A-amylase 2 temp"]
+#                    self.mash6time = msg_in["A-amylase 2 time"]
+#                    self.mashouttemp = msg_in["mash out temp"]
+#                    self.mashouttime = msg_in["mash out time"]
+#                    self.boiltime = msg_in["boil time"]
+#                    self.hopadd = msg_in["hop additions"]
+#                    self.hop1time = msg_in["hop 1 time"]
+#                    self.hop2time = msg_in["hop 2 time"]
+#                    self.hop3time = msg_in["hop 3 time"]
+#                    self.hop4time = msg_in["hop 4 time"]
+#                    self.hop5time = msg_in["hop 5 time"]
 
                 #requests.delete("http://localhost:5000/api/step/")
                 #requests.put("http://localhost:5000/api/config/brew_name", data=json.dumps({"name": "brew_name", "value": "Brewfather Recipe"}), headers = {"Content-Type" : "application/json"} )
@@ -427,19 +491,19 @@ def BFMQTT_UpdateRecipe_background_task(self):
                 #requests.get("http://localhost:5000/ui/")
                 #requests.get("http://localhost:5000/api/system/dump")
 
-                recipe_data = {"name" : "Brewfather Recipe", 
-                    "steps" : [  
-                        {"name" : "Mash In", "type" : "MASH", "timer" : 1 ,"temp" : self.mashintemp}, 
-                        {"name" : "Mash Step 1", "type" : "MASH", "timer" : self.mash1time ,"temp" : self.mash1temp}, 
-                        {"name" : "Mash Step 2", "type" : "MASH", "timer" : self.mash2time ,"temp" : self.mash2temp}, 
-                        {"name" : "Mash Step 3", "type" : "MASH", "timer" : self.mash3time ,"temp" : self.mash3temp}, 
-                        {"name" : "Mash Step 4", "type" : "MASH", "timer" : self.mash4time ,"temp" : self.mash4temp}, 
-                        {"name" : "Mash Step 5", "type" : "MASH", "timer" : self.mash5time ,"temp" : self.mash5temp}, 
-                        {"name" : "Mash Step 6", "type" : "MASH", "timer" : self.mash6time ,"temp" : self.mash6temp},
-                        {"name" : "Mash Out", "type" : "MASH", "timer" : self.mashouttime ,"temp" : self.mashouttemp}, 
-                        {"name" : "Boil Step", "type" : "BOIL", "timer" : self.boiltime ,"temp" : 100}
-                    ]
-                }
+ #               recipe_data = {"name" : "Brewfather Recipe", 
+ #                   "steps" : [  
+ #                       {"name" : "Mash In", "type" : "MASH", "timer" : 1 ,"temp" : self.mashintemp}, 
+ #                       {"name" : "Mash Step 1", "type" : "MASH", "timer" : self.mash1time ,"temp" : self.mash1temp}, 
+ #                       {"name" : "Mash Step 2", "type" : "MASH", "timer" : self.mash2time ,"temp" : self.mash2temp}, 
+ #                       {"name" : "Mash Step 3", "type" : "MASH", "timer" : self.mash3time ,"temp" : self.mash3temp}, 
+ #                       {"name" : "Mash Step 4", "type" : "MASH", "timer" : self.mash4time ,"temp" : self.mash4temp}, 
+ #                       {"name" : "Mash Step 5", "type" : "MASH", "timer" : self.mash5time ,"temp" : self.mash5temp}, 
+ #                       {"name" : "Mash Step 6", "type" : "MASH", "timer" : self.mash6time ,"temp" : self.mash6temp},
+ #                       {"name" : "Mash Out", "type" : "MASH", "timer" : self.mashouttime ,"temp" : self.mashouttemp}, 
+ #                       {"name" : "Boil Step", "type" : "BOIL", "timer" : self.boiltime ,"temp" : 100}
+ #                   ]
+ #               }
                 
                 #recipe_hop_data = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1": self.hop1time, "hop_2": self.hop2time, "hop_3": self.hop3time,"hop_4": self.hop4time, "hop_5": self.hop5time},"id":9}
             #    recipe_hop_data = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":None,"id":9,"name":"Boil Step","order":None,"start":None,"state":"I","stepstate":None,"type":"BoilStep"}
@@ -447,10 +511,10 @@ def BFMQTT_UpdateRecipe_background_task(self):
              #   print "HOP: ", recipe_hop_data
 #{"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":null,"id":9,"name":"Boil Step","order":8,"start":null,"state":null,"stepstate":null,"type":"BoilStep"}
                # if brewing do not imort recipe, otherwise it will hang. 
-                requests.post("http://localhost:5000/api/recipe/import/v1/", data=json.dumps(recipe_data), headers = {'Content-Type':'application/json'} )
-                time.sleep(.1) 
-                requests.post("http://localhost:5000/api/step/reset")
-                time.sleep(.1)
+#                requests.post("http://localhost:5000/api/recipe/import/v1/", data=json.dumps(recipe_data), headers = {'Content-Type':'application/json'} )
+  #              time.sleep(.1) 
+#                requests.post("http://localhost:5000/api/step/reset")
+  #              time.sleep(.1)
                 #requests.post("http://localhost:5000/api/step/9", data=recipe_hop_data, headers = {'Content-Type':'application/json'} )
 
                 #recipe_data_boil = {"name":"Boil Step 2","type":"BoilStep","config":{"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5","kettle":"1","temp":100,"timer":60}}
@@ -463,11 +527,11 @@ def BFMQTT_UpdateRecipe_background_task(self):
 # http://localhost:5000/api/step/9
 # {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":null,"id":9,"name":"Boil Step","order":8,"start":null,"state":null,"stepstate":null,"type":"BoilStep"}
 
-            except Exception as e:
-                print e
+   #         except Exception as e:
+   #             print e
 
-        self.cache["mqtt"].client.subscribe(self.recipes_topic)
-        self.cache["mqtt"].client.message_callback_add(self.recipes_topic, on_message_recipe)
+#        self.cache["mqtt"].client.subscribe(self.recipes_topic)
+#        self.cache["mqtt"].client.message_callback_add(self.recipes_topic, on_message_recipe)
     
 @cbpi.initalizer(order=0)
 def initBFMQTT(app):
