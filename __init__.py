@@ -27,13 +27,6 @@ import pdb
 q = Queue()
 mashkettle_id = None
 hltkettle_id = None
-pump_id = None
-mashheater_id = None
-hltheater_id = None
-#ferm1heater_id = None
-#ferm1cooler_id = None
-#ferm2heater_id = None
-#ferm2cooler_id = None
 
 def on_connect(client, userdata, flags, rc):
     print("BF MQTT Connected" + str(rc))
@@ -85,52 +78,26 @@ class BF_MQTT_Thread (threading.Thread):
 @cbpi.sensor
 class BF_MQTT_ListenerCommands(SensorActive):
      
-#    base_pump = Property.Actor(label="Pump Actor", description="Select the Pump actor you would like to control from Brewfather.")
     base_mashkettle = Property.Kettle(label="Mash kettle to control", description="Select the Mash kettle you would like to control from Brewfather.")
     base_hltkettle = Property.Kettle(label="HLT Kettle to control", description="Select the HLT kettle you would like to control from Brewfather. If none leave blank.")
-#    base_mashheater = Property.Actor(label="Mash Heater Actor", description="Select the mash heater actor whose power you would like to control from Brewfather.")
-#    base_hltheater = Property.Actor(label="HLT Heater Actor", description="Select the HTL heater actor whose power you would like to control from Brewfather If none leave blank.") 
-#    base_ferm1 = Property.Kettle(label="Fermenter1 to control", description="Select Fermenter Channel 1 you would like to control from Brewfather.")
-#    base_ferm2 = Property.Kettle(label="Fermenter2 to control", description="Select Fermenter Channel 2 you would like to control from Brewfather.")
 
     def init(self):
         self.homebrewing_commands_topic = self.get_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", None) 
         self.thermostat_commands_topic = self.get_config_parameter("BF_MQTT_THERMOSTAT_COMMANDS_TOPIC", None) 
         self.homebrewing_events_topic = self.get_config_parameter("BF_MQTT_HOMEBREWING_EVENTS_TOPIC", None)
-        self.homebrewing_recipes_topic = self.get_config_parameter("BF_MQTT_HOMEBREWING_RECIPES_TOPIC", None)
+        self.homebrewing_recipes_topic = self.get_config_parameter("BF_MQTT_HOMEBREWING_RECIPES_TOPIC", None) + "/1"
+        self.thermostat_profiles_1_topic = self.get_config_parameter("BF_MQTT_THERMOSTAT_PROFILES_TOPIC", None) + "/1"
+        self.thermostat_profiles_2_topic = self.get_config_parameter("BF_MQTT_THERMOSTAT_PROFILES_TOPIC", None) + "/2"
 
         SensorActive.init(self)
        
         global mashkettle_id
         global hltkettle_id
-        global pump_id
-        global mashheater_id
-        global hltheater_id
-        global mashkettle_auto_status
         mashkettle_id = self.base_mashkettle
-        mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
-        pump_id = mashkettle.agitator
-        mashheater_id = mashkettle.heater
-        
-        hltkettle = cbpi.cache.get("kettle")[int(self.base_hltkettle)]
         hltkettle_id = self.base_hltkettle
-        hltheater_id = hltkettle.heater
         
         fermenter1 = cbpi.cache.get("fermenter")[int(1)] 
         fermenter2 = cbpi.cache.get("fermenter")[int(2)]
-        #fermenter3 = cbpi.cache.get("fermenter")[int(3)]
-        print "*** Fermenter1 = ", fermenter1
-        print "fermenter1 heater = ", fermenter1.heater
-        print "fermenter1 cooler = ", fermenter1.cooler
-        print "*** Fermenter2 = ", fermenter2
-        print "fermenter2 heater = ", fermenter2.heater
-        print "fermenter2 cooler = ", fermenter2.cooler
-        #print "fermenter3 = ", fermenter3
-
-        pump = cbpi.cache.get("kettle")[int(mashkettle_id)]
-        print "kettle1 pump id = ", pump.agitator + " pump_id = ", pump_id
-        print "kettle1 heater id =", pump.heater + " mashheater_id = ", mashheater_id
-
 
         def on_message_homebrewing_commands(client, userdata, msg):
 
@@ -139,7 +106,6 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 msg_in=json.loads(msg_decode)
 
                 print "*** on_msg_hbr fermenter1 = ", fermenter1
-       #         print "*** on_msg_hbr self.fermenter1 = ", self.fermenter1
 
                 print "=================================" 
                 print("BF MQTT Homebrewing Data Received",msg_decode)
@@ -259,7 +225,9 @@ class BF_MQTT_ListenerCommands(SensorActive):
                     else:
                         self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/auto", payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
 
-  #             if "countdown" in msg_in:
+#                if "countdown" in msg_in:
+#                    create 1 step recipe, with countdown and set temp.
+#                       http://localhost:5000/api/actor/1/toggle/30
 
             except Exception as e:
                 print e
@@ -271,7 +239,106 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 print "================================="
                 print("BF MQTT Thermostat Data Received",msg_decode)
                 print "================================="
-                print "**** STOP in Thermostat"
+
+                if "stop" in msg_in:
+                    if msg_in["stop"] == True:
+                        fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+                        if fermenter1.state == True:
+                            requests.post("http://localhost:5000/api/fermenter/1/automatic", timeout = 1)
+                        fermenter2 = cbpi.cache.get("fermenter")[int(2)]
+                        if fermenter2.state == True:
+                            requests.post("http://localhost:5000/api/fermenter/2/automatic", timeout = 1)
+
+                if "start" in msg_in:
+                    if msg_in["start"] == "advanced" and msg_in["CH1 profile"] == 1:
+                        fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+                        requests.post("http://localhost:5000/api/fermenter/1/brewname", data=json.dumps({"brewname":"Brewfather CH1"}), timeout = 1)
+                        if fermenter1.state == False: 
+                            requests.post("http://localhost:5000/api/fermenter/1/automatic", timeout = 1)
+                    if msg_in["start"] == "advanced" and msg_in["CH2 profile"] == 2:
+                        fermenter2 = cbpi.cache.get("fermenter")[int(2)]
+                        if fermenter2.state == False:
+                            requests.post("http://localhost:5000/api/fermenter/2/automatic", timeout = 1)
+
+                if "CH1 SP" in msg_in:
+                    self.settemp = str(msg_in["CH1 SP"])
+                    requests.post("http://localhost:5000/api/fermenter/1/targettemp/"  + self.settemp, timeout = 1)
+                    requests.post("http://localhost:5000/api/fermenter/1/step", data=json.dumps({"fermenter_id":1,"name":"BF CH1 Time","temp":self.settemp,"days":"","minutes":"","hours":""}) , timeout = 1)
+
+                if "CH2 SP" in msg_in:
+                    self.settemp = str(msg_in["CH2 SP"])
+                    requests.post("http://localhost:5000/api/fermenter/2/targettemp/"  + self.settemp, timeout = 1)
+
+                if "CH1 countdown" in msg_in:
+                    self.settime = int(msg_in["CH1 countdown"])
+                    self.settime_days = (self.settime / 1440)  
+                    self.settime_hours = (self.settime / 60) % 24 
+                    self.settime_minutes = self.settime % 60 
+                   
+                    profiles_1_data = {
+                        "fermenter_id" : 1,
+                        "name" : "BF CH1 Simple Step",
+                        "temp" : "",
+                        "days" : self.settime_days,
+                        "minutes" : self.settime_minutes,
+                        "hours" : self.settime_hours
+                    }
+                    
+# delete all fermenter profiles
+#                    fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+#                    for idx, value in cbpi.cache["fermenter"].iteritems():
+#                        try:
+#                            if value.id == int(fermenter1.id):
+#                                print value.steps
+#                        except  Exception as e:
+#                            print e
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/1", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/2", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/3", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/4", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/5", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/6", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/7", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/8", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/9", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/10", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/11", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/12", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/13", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/14", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/15", timeout = 1)
+                    requests.post("http://localhost:5000/api/fermenter/1/step", data=json.dumps(profiles_1_data), headers = {'Content-Type':'application/json'}, timeout = 1)
+
+                if "CH2 countdown" in msg_in:
+                    self.settime = int(msg_in["CH2 countdown"])
+                    self.settime_days = (self.settime / 1440)
+                    self.settime_hours = (self.settime / 60) % 24
+                    self.settime_minutes = self.settime % 60
+                    profiles_2_data = {
+                        "fermenter_id" : 2,
+                        "name" : "BF CH2 Simple Step",
+                        "temp" : "",
+                        "days" : self.settime_days,
+                        "minutes" : self.settime_minutes,
+                        "hours" : self.settime_hours
+                    }
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/1", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/2", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/3", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/4", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/5", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/6", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/7", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/8", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/9", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/10", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/11", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/12", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/13", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/14", timeout = 1)
+                    requests.delete("http://localhost:5000/api/fermenter/2/step/15", timeout = 1)
+                    requests.post("http://localhost:5000/api/fermenter/2/step", data=json.dumps(profiles_2_data), headers = {'Content-Type':'application/json'}, timeout = 1)
+
             except Exception as e:
                 print e
         
@@ -347,8 +414,8 @@ class BF_MQTT_ListenerCommands(SensorActive):
 
         self.api.cache["mqtt"].client.subscribe(self.homebrewing_recipes_topic)
         self.api.cache["mqtt"].client.message_callback_add(self.homebrewing_recipes_topic, on_message_homebrewing_recipe)
-#        self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_1_topic)
-#        self.api.cache["mqtt"].client.message_callback_add(self.thermostat_profiles_1_topic, on_message_thermostat_profiles_1)
+        self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_1_topic)
+        self.api.cache["mqtt"].client.message_callback_add(self.thermostat_profiles_1_topic, on_message_thermostat_profiles_1)
 #        self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_2_topic)
 #        self.api.cache["mqtt"].client.message_callback_add(self.thermostat_profiles_2_topic, on_message_thermostat_profiles_2)
 
@@ -356,7 +423,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
         self.api.cache["mqtt"].client.unsubscribe(self.homebrewing_commands_topic)
         self.api.cache["mqtt"].client.unsubscribe(self.thermostat_commands_topic) 
         self.api.cache["mqtt"].client.unsubscribe(self.homebrewing_recipes_topic)
-#        self.api.cache["mqtt"].client.unsubscribe(self.thermostat_profiles1_topic)
+        self.api.cache["mqtt"].client.unsubscribe(self.thermostat_profiles1_topic)
 #        self.api.cache["mqtt"].client.unsubscribe(self.thermostat_profiles2_topic)
         SensorActive.stop(self)
 
@@ -368,15 +435,16 @@ def BFMQTT_DynamicMash_background_task(self):
 
     global mashkettle_id
     global hltkettle_id
-    global pump_id
-    global mashheater_id
-    global hltheater_id
 
-#    self.homebrewing_events_topic = cbpi.get_config_parameter("BF_MQTT_HOMEBREWING_EVENTS_TOPIC", None)
     self.homebrewing_dynamicmash_topic = cbpi.get_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICMASH_TOPIC", None)
     self.homebrewing_dynamichlt_topic = cbpi.get_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICHLT_TOPIC", None)
+    self.thermostat_dynamic_1_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/1"
+    self.thermostat_dynamic_2_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/2"
+
     self.mash = None
     self.HLT = None
+    self.Fermenter1 = None
+    self.Fermenter2 = None
     #step = cbpi.cache.get("active_step")
     #kettle = cbpi.cache.get("kettle")
     
@@ -407,12 +475,13 @@ def BFMQTT_DynamicMash_background_task(self):
 
     for idx, value in cbpi.cache["actors"].iteritems():
         try:
-            if value.id == int(pump_id):
+            mashkettle = cbpi.cache.get("kettle")[int(mashkettle_id)]
+            if value.id == int(mashkettle.agitator):
                 if value.state == 1:
                     self.pump_state = "on"
                 if value.state == 0:
                     self.pump_state = "off"
-            if value.id == int(mashheater_id):
+            if value.id == int(mashkettle.heater):
                 if value.state == 1:
                     self.mash_heater = value.power
                 if value.state == 0:
@@ -421,7 +490,8 @@ def BFMQTT_DynamicMash_background_task(self):
             self.mash = False
 
         try:
-            if value.id == int(hltheater_id):
+            hltkettle = cbpi.cache.get("kettle")[int(hltkettle_id)]
+            if value.id == int(hltkettle.heater):
                 if value.state == 1:
                     self.hlt_heater = value.power
                 if value.state == 0:
@@ -518,8 +588,8 @@ def initBFMQTT(app):
 
     deviceid = app.get_config_parameter("BF_MQTT_DEVICEID", None)
     if deviceid is None:
-        deviceid = "*** Enter Device Id ***"
-        cbpi.add_config_parameter("BF_MQTT_DEVICEID", "*** Enter Device ID ***", "text", "Brewfather MQTT DeviceID")
+        deviceid = "*_Enter Device ID_*"
+        cbpi.add_config_parameter("BF_MQTT_DEVICEID", "*_Enter Device ID_*", "text", "Brewfather MQTT DeviceID")
 
     homebrewing_commands_topic = app.get_config_parameter("BF_MQTT_HOMEBREWING_COMMANDS_TOPIC", None)
     if homebrewing_commands_topic is None:
@@ -534,22 +604,32 @@ def initBFMQTT(app):
     homebrewing_events_topic = app.get_config_parameter("BF_MQTT_HOMEBREWING_EVENTS_TOPIC", None)
     if homebrewing_events_topic is None:
         homebrewing_events_topic = "cbpi/homebrewing/" + deviceid + "/events"
-        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_EVENTS_TOPIC", "cbpi/homebrewing/" + deviceid + "/events", "text", "Brewfather MQTT Events Topic")
+        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_EVENTS_TOPIC", "cbpi/homebrewing/" + deviceid + "/events", "text", "Brewfather MQTT Homebrewing Events Topic")
 
     homebrewing_dynamicmash_topic = app.get_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICMASH_TOPIC", None)
     if homebrewing_dynamicmash_topic is None:
         homebrewing_dynamicmash_topic = "cbpi/homebrewing/" + deviceid + "/dynamic/mash"
-        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICMASH_TOPIC", "cbpi/homebrewing/" + deviceid + "/dynamic/mash", "text", "Brewfather MQTT Dynamic Mash Topic")
+        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICMASH_TOPIC", "cbpi/homebrewing/" + deviceid + "/dynamic/mash", "text", "Brewfather MQTT Homebrewing Dynamic Mash Topic")
 
     homebrewing_dynamichlt_topic = app.get_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICHLT_TOPIC", None)
     if homebrewing_dynamichlt_topic is None:
         homebrewing_dynamichlt_topic = "cbpi/homebrewing/" + deviceid + "/dynamic/HLT"
-        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICHLT_TOPIC", "cbpi/homebrewing/" + deviceid + "/dynamic/HLT", "text", "Brewfather MQTT Dynamic HLT Topic")
+        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICHLT_TOPIC", "cbpi/homebrewing/" + deviceid + "/dynamic/HLT", "text", "Brewfather MQTT Homebrewing Dynamic HLT Topic")
 
     homebrewing_recipes_topic = app.get_config_parameter("BF_MQTT_HOMEBREWING_RECIPES_TOPIC", None)
     if homebrewing_recipes_topic is None:
-        homebrewing_recipes_topic = "cbpi/homebrewing/" + deviceid + "/recipes/update/1"
-        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_RECIPES_TOPIC", "cbpi/homebrewing/" + deviceid + "/recipes/update/1", "text", "Brewfather MQTT Recipes Topic")
+        homebrewing_recipes_topic = "cbpi/homebrewing/" + deviceid + "/recipes/update"
+        cbpi.add_config_parameter("BF_MQTT_HOMEBREWING_RECIPES_TOPIC", "cbpi/homebrewing/" + deviceid + "/recipes/update", "text", "Brewfather MQTT Homebrewing Recipes Topic")
+
+    thermostat_dynamic_topic = app.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None)
+    if thermostat_dynamic_topic is None:
+        thermostat_dynamic_topic = "cbpi/thermostat/" + deviceid + "/dynamic"
+        cbpi.add_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", "cbpi/thermostat/" + deviceid + "/dynamic", "text", "Brewfather MQTT Thermostat Dynamic Topic")
+
+    thermostat_profiles_topic = app.get_config_parameter("BF_MQTT_THERMOSTAT_PROFILES_TOPIC", None)
+    if thermostat_profiles_topic is None:
+        thermostat_profiles_topic = "cbpi/thermostat/" + deviceid + "/profiles/update"
+        cbpi.add_config_parameter("BF_MQTT_THERMOSTAT_PROFILES_TOPIC", "cbpi/thermostat/" + deviceid + "/profiles/update", "text", "Brewfather MQTT Thermostat Profiles Topic")
 
     app.cache["mqtt"] = BF_MQTT_Thread(server,port,username, password, tls, deviceid)
     app.cache["mqtt"].daemon = True
