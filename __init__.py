@@ -96,8 +96,8 @@ class BF_MQTT_ListenerCommands(SensorActive):
         mashkettle_id = self.base_mashkettle
         hltkettle_id = self.base_hltkettle
         
-        fermenter1 = cbpi.cache.get("fermenter")[int(1)] 
-        fermenter2 = cbpi.cache.get("fermenter")[int(2)]
+#        fermenter1 = cbpi.cache.get("fermenter")[int(1)] 
+#       fermenter2 = cbpi.cache.get("fermenter")[int(2)]
 
         def on_message_homebrewing_commands(client, userdata, msg):
 
@@ -171,12 +171,11 @@ class BF_MQTT_ListenerCommands(SensorActive):
                             self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/auto", payload=json.dumps({"event": "stop"}), qos=1, retain=True)
 
                 if "pause" in msg_in:
-                    # testa om self.pause funkar utan global. 
-                    if msg_in["pause"] == True: #and self.pause != True:
+                    if msg_in["pause"] == True:
                         mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
                         if mashkettle.state == True:
                             requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic", timeout = 1)
-                            self.sleep(.1)
+                            self.sleep(.01)
                             self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/auto", payload=json.dumps({"event": "pause"}), qos=1, retain=True)
                         else:
                             self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/manual", payload=json.dumps({"event": "pause"}), qos=1, retain=True)
@@ -184,11 +183,11 @@ class BF_MQTT_ListenerCommands(SensorActive):
                         self.sleep(.1) 
                         self.pause = True 
                     
-                    if msg_in["pause"] == False: #and self.pause == True:
+                    if msg_in["pause"] == False:
                         mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
                         if mashkettle.state == False:
                             requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/automatic", timeout = 1)
-                            self.sleep(.1) 
+                            self.sleep(.01) 
                             self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/manual", payload=json.dumps({"event": "resume"}), qos=1, retain=True)
                         else:
                             self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/auto", payload=json.dumps({"event": "resume"}), qos=1, retain=True)
@@ -198,7 +197,8 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 if "mash SP" in msg_in:
                     self.settemp = str(msg_in["mash SP"])
                     requests.post("http://localhost:5000/api/kettle/" + self.base_mashkettle + "/targettemp/"  + self.settemp, timeout = 1)
-                    self.sleep(.1) 
+                    self.sleep(.01) 
+                    # figure out how to get and set countdown time and set it with temp.
                     mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)]
                     if mashkettle.state == False:
                         self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/manual", payload=json.dumps({"event": "Set Target Temp = " + self.settemp}), qos=1, retain=True)
@@ -218,16 +218,30 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 if "HLT SP" in msg_in: 
                     self.hltsp = str(msg_in["HLT SP"])
                     requests.post("http://localhost:5000/api/actor/"  + self.base_hltkettle + "/targettemp/"  + self.hltsp, timeout = 1)
-                    self.sleep(.1)
+                    self.sleep(.01)
                     hltkettle = cbpi.cache.get("kettle")[int(self.base_hltkettle)]
                     if hltkettle.state == False:
                         self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/manual", payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
                     else:
                         self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/auto", payload=json.dumps({"event": "Set HLT Target Temp = " + self.hltsp}), qos=1, retain=True)
 
-#                if "countdown" in msg_in:
-#                    create 1 step recipe, with countdown and set temp.
-#                       http://localhost:5000/api/actor/1/toggle/30
+                if "countdown" in msg_in:
+                    self.countdown = str(msg_in["countdown"])
+                    mashkettle = cbpi.cache.get("kettle")[int(self.base_mashkettle)] 
+                    countdown_simple_recipe_data = {"name" : "Brewfather Single Step",
+                        "steps" : [
+                            {"name" : "Brewfather Single Step", "type" : "MASH", "timer" : self.countdown ,"temp" : mashkettle.target_temp}
+                        ]
+                    }
+                    requests.post("http://localhost:5000/api/recipe/import/v1/", data=json.dumps(countdown_simple_recipe_data), headers = {'Content-Type':'application/json'}, timeout = 1 )
+                    time.sleep(.01)
+                    requests.post("http://localhost:5000/api/step/reset", timeout = 1)
+                    time.sleep(.01)
+                    if mashkettle.state == False:
+                        self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/manual", payload=json.dumps({"event": "Set Countdown = " + self.countdown}), qos=1, retain=True)
+                    else:
+                        self.api.cache["mqtt"].client.publish(self.homebrewing_events_topic + "/auto", payload=json.dumps({"event": "Set Countdown = " + self.countdown}), qos=1, retain=True)
+
 
             except Exception as e:
                 print e
@@ -283,31 +297,20 @@ class BF_MQTT_ListenerCommands(SensorActive):
                         "minutes" : self.settime_minutes,
                         "hours" : self.settime_hours
                     }
-                    
-# delete all fermenter profiles
-#                    fermenter1 = cbpi.cache.get("fermenter")[int(1)]
-#                    for idx, value in cbpi.cache["fermenter"].iteritems():
-#                        try:
-#                            if value.id == int(fermenter1.id):
-#                                print value.steps
-#                        except  Exception as e:
-#                            print e
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/1", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/2", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/3", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/4", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/5", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/6", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/7", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/8", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/9", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/10", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/11", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/12", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/13", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/14", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/15", timeout = 1)
+                    # delete all fermenter profiles
+                    #fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+                    #for idx, value in cbpi.cache["fermenter"].iteritems():
+                    #    try:
+                    #        if value.id == int(fermenter1.id):
+                    #            print "value.steps = ", value.steps
+                    #            print "value__dics__._keys() = ", value.__dict__.keys()
+                    #    except  Exception as e:
+                    #        print e
+                    for x in range(15):
+                        requests.delete("http://localhost:5000/api/fermenter/1/step/x", timeout = 1)
+                        time.sleep(.01)
                     requests.post("http://localhost:5000/api/fermenter/1/step", data=json.dumps(profiles_1_data), headers = {'Content-Type':'application/json'}, timeout = 1)
+                    time.sleep(.01)
 
                 if "CH2 countdown" in msg_in:
                     self.settime = int(msg_in["CH2 countdown"])
@@ -322,22 +325,11 @@ class BF_MQTT_ListenerCommands(SensorActive):
                         "minutes" : self.settime_minutes,
                         "hours" : self.settime_hours
                     }
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/1", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/2", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/3", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/4", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/5", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/6", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/7", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/8", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/9", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/10", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/11", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/12", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/13", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/14", timeout = 1)
-                    requests.delete("http://localhost:5000/api/fermenter/2/step/15", timeout = 1)
+                    for x in range(15):
+                        requests.delete("http://localhost:5000/api/fermenter/2/step/x", timeout = 1)
+                        time.sleep(.01)
                     requests.post("http://localhost:5000/api/fermenter/2/step", data=json.dumps(profiles_2_data), headers = {'Content-Type':'application/json'}, timeout = 1)
+                    time.sleep(.01)
 
             except Exception as e:
                 print e
@@ -388,9 +380,9 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 }
                 
                 requests.post("http://localhost:5000/api/recipe/import/v1/", data=json.dumps(recipe_data), headers = {'Content-Type':'application/json'}, timeout = 1 )
-                #time.sleep(.1)
+                time.sleep(.01)
                 requests.post("http://localhost:5000/api/step/reset", timeout = 1)
-                #time.sleep(.5)
+                time.sleep(.01)
 
             except Exception as e:
                 print e
@@ -402,6 +394,50 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 print "================================="
                 print("BF MQTT Profile1 Data Received",msg_decode)
                 print "================================="
+                if "SP1" in msg_in:
+                    self.SP1 = msg_in["SP1"]
+                    self.soak1 = msg_in["soak1"]
+                    self.ramp1 = msg_in["ramp1"]
+                    self.SP2 = msg_in["SP2"]
+                    self.soak2 = msg_in["soak2"]
+                    self.ramp2 = msg_in["ramp2"]
+                    self.SP3 = msg_in["SP3"]
+                    self.soak3 = msg_in["soak3"]
+                    self.ramp3 = msg_in["ramp3"]
+                    self.SP4 = msg_in["SP4"]
+                    self.soak4 = msg_in["soak4"]
+                    self.ramp4 = msg_in["ramp4"]
+                    self.SP5 = msg_in["SP5"]
+                    self.soak5 = msg_in["soak5"]
+                    self.ramp5 = msg_in["ramp5"]
+                    self.SP6 = msg_in["SP6"]
+                    self.soak6 = msg_in["soak6"]
+                    self.ramp6 = msg_in["ramp6"]
+                    self.SP7 = msg_in["SP7"]
+                    self.soak7 = msg_in["soak7"]
+                    self.ramp7 = msg_in["ramp7"]
+                    self.SP8 = msg_in["SP8"]
+                
+                self.settime_days = (self.soak1 / 86400)
+                self.settime_hours = (self.soak1 / 3600) % 24
+                self.settime_minutes = self.soak1 % 60 
+
+                profiles_1_data = {
+                    "fermenter_id" : 1,
+                    "name" : "BF CH1 Step 1",
+                    "temp" : self.SP1,
+                    "days" : self.settime_days,
+                    "minutes" : self.settime_minutes,
+                    "hours" : self.settime_hours
+                }
+                # find better method to delete all steps
+                # make loop to add steps with ramp.
+                for x in range(20):
+                    requests.delete("http://localhost:5000/api/fermenter/1/step/x", timeout = 1)
+                    time.sleep(.01)
+                requests.post("http://localhost:5000/api/fermenter/1/step", data=json.dumps(profiles_1_data), headers = {'Content-Type':'application/json'}, timeout = 1)
+                time.sleep(.01)
+
             except Exception as e:
                 print e
 
@@ -525,38 +561,6 @@ def BFMQTT_DynamicMash_background_task(self):
         }
 
         self.cache["mqtt"].client.publish(self.homebrewing_dynamichlt_topic, payload=json.dumps(dynamic_hlt_data), qos=0, retain=True)
-    
-
-# recipe hop/boil
-                #requests.delete("http://localhost:5000/api/step/")
-                #requests.put("http://localhost:5000/api/config/brew_name", data=json.dumps({"name": "brew_name", "value": "Brewfather Recipe"}), headers = {"Content-Type" : "application/json"} )
-                #recipe_data = {"name":"step1","type":"MashInStep","config":{"kettle":"1","temp":"26"}} 
-                #requests.post("http://localhost:5000/api/step/", data=json.dumps(recipe_data), headers = {"Content-Type" : "application/json"} )
-                #requests.get("http://localhost:5000/ui/")
-                #requests.get("http://localhost:5000/api/system/dump")
-
-                
-                #recipe_hop_data = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1": self.hop1time, "hop_2": self.hop2time, "hop_3": self.hop3time,"hop_4": self.hop4time, "hop_5": self.hop5time},"id":9}
-            #    recipe_hop_data = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":None,"id":9,"name":"Boil Step","order":None,"start":None,"state":"I","stepstate":None,"type":"BoilStep"}
-                
-             #   print "HOP: ", recipe_hop_data
-#{"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":null,"id":9,"name":"Boil Step","order":8,"start":null,"state":null,"stepstate":null,"type":"BoilStep"}
-               # if brewing do not imort recipe, otherwise it will hang. 
-#                requests.post("http://localhost:5000/api/recipe/import/v1/", data=json.dumps(recipe_data), headers = {'Content-Type':'application/json'} )
-  #              time.sleep(.1) 
-#                requests.post("http://localhost:5000/api/step/reset")
-  #              time.sleep(.1)
-                #requests.post("http://localhost:5000/api/step/9", data=recipe_hop_data, headers = {'Content-Type':'application/json'} )
-
-                #recipe_data_boil = {"name":"Boil Step 2","type":"BoilStep","config":{"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5","kettle":"1","temp":100,"timer":60}}
-                #requests.post("http://localhost:5000/api/step/", data=json.dumps(recipe_data_boil), headers = {"Content-Type" : "application/json"} )
-
-               # recipe_data_boil = {"config":{"kettle":"1","hop_1":"10","hop_2":"20","hop_3":"30","hop_4":"40","hop_5":"50"},"id":9}
-                #recipe_data_boil = {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"id":9,"name":"Boil Step","type":"BoilStep"}
-                #requests.put("http://localhost:5000/api/step/10", data=recipe_data_boil, headers={"Content-Type" : "application/json"} )
-               # requests.post("http://localhost:5000/api/step/sort")
-# http://localhost:5000/api/step/9
-# {"config":{"kettle":"1","temp":100,"timer":60,"hop_1":"1","hop_2":"2","hop_3":"3","hop_4":"4","hop_5":"5"},"end":null,"id":9,"name":"Boil Step","order":8,"start":null,"state":null,"stepstate":null,"type":"BoilStep"}
 
 @cbpi.initalizer(order=0)
 def initBFMQTT(app):
