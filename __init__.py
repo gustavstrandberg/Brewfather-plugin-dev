@@ -105,8 +105,6 @@ class BF_MQTT_ListenerCommands(SensorActive):
                 msg_decode=str(msg.payload.decode("utf-8","ignore"))
                 msg_in=json.loads(msg_decode)
 
-                print "*** on_msg_hbr fermenter1 = ", fermenter1
-
                 print "=================================" 
                 print("BF MQTT Homebrewing Data Received",msg_decode)
                 print "=================================" 
@@ -450,6 +448,7 @@ class BF_MQTT_ListenerCommands(SensorActive):
 
         self.api.cache["mqtt"].client.subscribe(self.homebrewing_recipes_topic)
         self.api.cache["mqtt"].client.message_callback_add(self.homebrewing_recipes_topic, on_message_homebrewing_recipe)
+
         self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_1_topic)
         self.api.cache["mqtt"].client.message_callback_add(self.thermostat_profiles_1_topic, on_message_thermostat_profiles_1)
 #        self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_2_topic)
