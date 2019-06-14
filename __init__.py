@@ -566,14 +566,15 @@ def BFMQTT_Thermostat_Dynamic_background_task(self):
         self.thermostat_dynamic_1_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/CH1"
         self.thermostat_dynamic_2_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/CH2"
 
-        fermenter1 = cbpi.cache.get("fermenter")[int(1)]
-        fermenter2 = cbpi.cache.get("fermenter")[int(2)]
-                                    
+        #fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+        #fermenter2 = cbpi.cache.get("fermenter")[int(2)]
+        self.fermenter1 = None
+        self.fermenter2 = None
+
         for idx, value in cbpi.cache["fermenter"].iteritems():
             try:
                 if value.id == int(1):
                     self.fermenter1 = True
-                    #self.fermenter1_target_temp = value.target_temp
                     self.fermenter1_current_temp = cbpi.get_sensor_value(value.sensor)
                     if value.state  == True:
                         self.fermenter1_runmode = "advanced"
@@ -584,7 +585,6 @@ def BFMQTT_Thermostat_Dynamic_background_task(self):
             try:
                 if value.id == int(2):
                     self.fermenter2 = True
-                    #self.fermenter2_target_temp = value.target_temp
                     self.fermenter2_current_temp = cbpi.get_sensor_value(value.sensor)
                     if value.state  == True:
                         self.fermenter2_runmode = "advanced"
