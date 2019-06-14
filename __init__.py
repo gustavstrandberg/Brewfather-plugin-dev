@@ -474,8 +474,6 @@ def BFMQTT_DynamicMash_background_task(self):
 
     self.homebrewing_dynamicmash_topic = cbpi.get_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICMASH_TOPIC", None)
     self.homebrewing_dynamichlt_topic = cbpi.get_config_parameter("BF_MQTT_HOMEBREWING_DYNAMICHLT_TOPIC", None)
-    self.thermostat_dynamic_1_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/1"
-    self.thermostat_dynamic_2_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/2"
 
     self.mash = None
     self.HLT = None
@@ -561,6 +559,97 @@ def BFMQTT_DynamicMash_background_task(self):
         }
 
         self.cache["mqtt"].client.publish(self.homebrewing_dynamichlt_topic, payload=json.dumps(dynamic_hlt_data), qos=0, retain=True)
+
+@cbpi.backgroundtask(key='BFMQTT_Thermostat_Dynamic', interval=1)
+def BFMQTT_Thermostat_Dynamic_background_task(self):
+
+        self.thermostat_dynamic_1_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/CH1"
+        self.thermostat_dynamic_2_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/CH2"
+
+        fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+        fermenter2 = cbpi.cache.get("fermenter")[int(2)]
+                                    
+        for idx, value in cbpi.cache["fermenter"].iteritems():
+            try:
+                if value.id == int(1):
+                    self.fermenter1 = True
+                    #self.fermenter1_target_temp = value.target_temp
+                    self.fermenter1_current_temp = cbpi.get_sensor_value(value.sensor)
+                    if value.state  == True:
+                        self.fermenter1_runmode = "advanced"
+                    if value.state == False:
+                        self.fermenter1_runmode = "off"
+            except:
+                self.fermenter1 = False
+            try:
+                if value.id == int(2):
+                    self.fermenter2 = True
+                    #self.fermenter2_target_temp = value.target_temp
+                    self.fermenter2_current_temp = cbpi.get_sensor_value(value.sensor)
+                    if value.state  == True:
+                        self.fermenter2_runmode = "advanced"
+                    if value.state == False:
+                        self.fermenter2_runmode = "off"
+            except:
+                self.fermenter2 = False
+
+        for idx, value in cbpi.cache["actors"].iteritems():
+            try:
+                fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+                if value.id == int(fermenter1.cooler):
+                    if value.state == 1:
+                        self.fermenter1_mode = "cooling"
+                if value.id == int(fermenter1.heater):
+                    if value.state == 1:
+                        self.fermenter1_mode = "heating"
+                        self.fermenter1_pwm = value.power
+                    if value.state == 0:
+                        self.fermenter1_mode = "off"
+                        self.fermenter1_pwm = "0"
+            except:
+                self.fermenter1 = False
+            try:
+                fermenter2 = cbpi.cache.get("fermenter")[int(2)]
+                if value.id == int(fermenter2.cooler):
+                    if value.state == 1:
+                        self.fermenter2_mode = "cooling"
+                if value.id == int(fermenter2.heater):
+                    if value.state == 1:
+                        self.fermenter2_mode = "heating"
+                        self.fermenter2_pwm = value.power
+                    if value.state == 0:
+                        self.fermenter2_mode = "off"
+                        self.fermenter2_pwm = "0"
+            except:
+                self.fermenter2 = False
+
+        if self.fermenter1:
+            dynamic_1_data = {
+                'time': 0,
+                'countdown': 0,
+                'countup': 0,
+                'SP': fermenter1.target_temp,
+                'mode': self.fermenter1_mode,
+                'runmode': self.fermenter1_runmode,
+                'temp': self.fermenter1_current_temp,
+                'unit': cbpi.get_config_parameter("unit", None),
+                'pwm': self.fermenter1_pwm
+            }
+            self.cache["mqtt"].client.publish(self.thermostat_dynamic_1_topic, payload=json.dumps(dynamic_1_data), qos=0, retain=True)
+
+        if self.fermenter2:
+            dynamic_2_data = {
+                'time': 0,
+                'countdown': 0,
+                'countup': 0,
+                'SP': fermenter2.target_temp,
+                'mode': self.fermenter2_mode,
+                'runmode': self.fermenter2_runmode,
+                'temp': self.fermenter2_current_temp,
+                'unit': cbpi.get_config_parameter("unit", None),
+                'pwm': self.fermenter2_pwm
+            }
+            self.cache["mqtt"].client.publish(self.thermostat_dynamic_2_topic, payload=json.dumps(dynamic_2_data), qos=0, retain=True)
 
 @cbpi.initalizer(order=0)
 def initBFMQTT(app):
