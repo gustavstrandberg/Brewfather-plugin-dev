@@ -428,12 +428,88 @@ class BF_MQTT_ListenerCommands(SensorActive):
                     "minutes" : self.settime_minutes,
                     "hours" : self.settime_hours
                 }
+                
                 # find better method to delete all steps
                 # make loop to add steps with ramp.
-                for x in range(20):
-                    requests.delete("http://localhost:5000/api/fermenter/1/step/x", timeout = 1)
-                    time.sleep(.01)
+                try:
+                    for xx in range(0, 10, 1):
+                        requests.delete("http://localhost:5000/api/fermenter/1/step/" + str(xx), timeout = 1)
+                        time.sleep(.02)
+                except Exception as e:
+                    print e
+                try:
+                    for xx in range(10, 20, 1):
+                        requests.delete("http://localhost:5000/api/fermenter/1/step/" + str(xx), timeout = 1)
+                        time.sleep(.02)
+                except Exception as e:
+                    print e
+
                 requests.post("http://localhost:5000/api/fermenter/1/step", data=json.dumps(profiles_1_data), headers = {'Content-Type':'application/json'}, timeout = 1)
+                time.sleep(.01)
+
+            except Exception as e:
+                print e
+
+        def on_message_thermostat_profiles_2(client, userdata, msg):
+            try:
+                msg_decode=str(msg.payload.decode("utf-8","ignore"))
+                msg_in=json.loads(msg_decode)
+                print "================================="
+                print("BF MQTT Profile2 Data Received",msg_decode)
+                print "================================="
+                if "SP1" in msg_in:
+                    self.SP1 = msg_in["SP1"]
+                    self.soak1 = msg_in["soak1"]
+                    self.ramp1 = msg_in["ramp1"]
+                    self.SP2 = msg_in["SP2"]
+                    self.soak2 = msg_in["soak2"]
+                    self.ramp2 = msg_in["ramp2"]
+                    self.SP3 = msg_in["SP3"]
+                    self.soak3 = msg_in["soak3"]
+                    self.ramp3 = msg_in["ramp3"]
+                    self.SP4 = msg_in["SP4"]
+                    self.soak4 = msg_in["soak4"]
+                    self.ramp4 = msg_in["ramp4"]
+                    self.SP5 = msg_in["SP5"]
+                    self.soak5 = msg_in["soak5"]
+                    self.ramp5 = msg_in["ramp5"]
+                    self.SP6 = msg_in["SP6"]
+                    self.soak6 = msg_in["soak6"]
+                    self.ramp6 = msg_in["ramp6"]
+                    self.SP7 = msg_in["SP7"]
+                    self.soak7 = msg_in["soak7"]
+                    self.ramp7 = msg_in["ramp7"]
+                    self.SP8 = msg_in["SP8"]
+
+                self.settime_days = (self.soak1 / 86400)
+                self.settime_hours = (self.soak1 / 3600) % 24
+                self.settime_minutes = self.soak1 % 60
+
+                profiles_2_data = {
+                    "fermenter_id" : 2,
+                    "name" : "BF CH1 Step 1",
+                    "temp" : self.SP1,
+                    "days" : self.settime_days,
+                    "minutes" : self.settime_minutes,
+                    "hours" : self.settime_hours
+                }
+
+                # find better method to delete all steps
+                # make loop to add steps with ramp.
+                try:
+                    for xx in range(0, 10, 1):
+                        requests.delete("http://localhost:5000/api/fermenter/2/step/" + str(xx), timeout = 1)
+                        time.sleep(.02)
+                except Exception as e:
+                    print e
+                try:
+                    for xx in range(10, 20, 1):
+                        requests.delete("http://localhost:5000/api/fermenter/2/step/" + str(xx), timeout = 1)
+                        time.sleep(.02)
+                except Exception as e:
+                    print e
+
+                requests.post("http://localhost:5000/api/fermenter/2/step", data=json.dumps(profiles_2_data), headers = {'Content-Type':'application/json'}, timeout = 1)
                 time.sleep(.01)
 
             except Exception as e:
@@ -451,15 +527,15 @@ class BF_MQTT_ListenerCommands(SensorActive):
 
         self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_1_topic)
         self.api.cache["mqtt"].client.message_callback_add(self.thermostat_profiles_1_topic, on_message_thermostat_profiles_1)
-#        self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_2_topic)
-#        self.api.cache["mqtt"].client.message_callback_add(self.thermostat_profiles_2_topic, on_message_thermostat_profiles_2)
+        self.api.cache["mqtt"].client.subscribe(self.thermostat_profiles_2_topic)
+        self.api.cache["mqtt"].client.message_callback_add(self.thermostat_profiles_2_topic, on_message_thermostat_profiles_2)
 
     def stop(self):
         self.api.cache["mqtt"].client.unsubscribe(self.homebrewing_commands_topic)
         self.api.cache["mqtt"].client.unsubscribe(self.thermostat_commands_topic) 
         self.api.cache["mqtt"].client.unsubscribe(self.homebrewing_recipes_topic)
         self.api.cache["mqtt"].client.unsubscribe(self.thermostat_profiles1_topic)
-#        self.api.cache["mqtt"].client.unsubscribe(self.thermostat_profiles2_topic)
+        self.api.cache["mqtt"].client.unsubscribe(self.thermostat_profiles2_topic)
         SensorActive.stop(self)
 
     def execute(self):
@@ -565,10 +641,10 @@ def BFMQTT_Thermostat_Dynamic_background_task(self):
         self.thermostat_dynamic_1_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/CH1"
         self.thermostat_dynamic_2_topic = cbpi.get_config_parameter("BF_MQTT_THERMOSTAT_DYNAMIC_TOPIC", None) + "/CH2"
 
-        #fermenter1 = cbpi.cache.get("fermenter")[int(1)]
-        #fermenter2 = cbpi.cache.get("fermenter")[int(2)]
         self.fermenter1 = None
         self.fermenter2 = None
+        self.fermenter1_mode = None
+        self.fermenter2_mode = None
 
         for idx, value in cbpi.cache["fermenter"].iteritems():
             try:
@@ -591,8 +667,7 @@ def BFMQTT_Thermostat_Dynamic_background_task(self):
                         self.fermenter2_runmode = "off"
             except:
                 self.fermenter2 = False
-        self.fermenter1_mode = None
-        self.fermenter2_mode = None
+
         for idx, value in cbpi.cache["actors"].iteritems():
             try:
                 fermenter1 = cbpi.cache.get("fermenter")[int(1)]
