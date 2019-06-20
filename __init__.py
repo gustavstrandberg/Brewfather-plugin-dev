@@ -595,6 +595,7 @@ def BFMQTT_Thermostat_Dynamic_background_task(self):
         for idx, value in cbpi.cache["actors"].iteritems():
             try:
                 fermenter1 = cbpi.cache.get("fermenter")[int(1)]
+                self.fermenter1_mode = None 
                 if value.id == int(fermenter1.cooler):
                     if value.state == 1:
                         self.fermenter1_mode = "cooling"
@@ -603,12 +604,12 @@ def BFMQTT_Thermostat_Dynamic_background_task(self):
                         self.fermenter1_mode = "heating"
                         self.fermenter1_pwm = value.power
                     if value.state == 0:
-                        self.fermenter1_mode = "off"
                         self.fermenter1_pwm = "0"
             except:
                 self.fermenter1 = False
             try:
                 fermenter2 = cbpi.cache.get("fermenter")[int(2)]
+                self.fermenter2_mode = None
                 if value.id == int(fermenter2.cooler):
                     if value.state == 1:
                         self.fermenter2_mode = "cooling"
@@ -617,7 +618,6 @@ def BFMQTT_Thermostat_Dynamic_background_task(self):
                         self.fermenter2_mode = "heating"
                         self.fermenter2_pwm = value.power
                     if value.state == 0:
-                        self.fermenter2_mode = "off"
                         self.fermenter2_pwm = "0"
             except:
                 self.fermenter2 = False
